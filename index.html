@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VFR Nav</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/inter-ui/3.19.3/inter.min.css');
+
+:root{
+  --bg-0:#0b0d12; --bg-1:#12151c; --bg-2:#181c25; --bg-3:#1f242f;
+  --border:#2a3040; --border-soft:#232834;
+  --text-0:#e9ecf1; --text-1:#aab1c2; --text-2:#6b7385;
+  --accent:#4fd1a5; --accent-dim:#245c48; --accent-blue:#5b8cff;
+  --warn:#e0a856; --danger:#e0685f;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+*{box-sizing:border-box;min-width:0;}
+html,body{margin:0;height:100%;background:var(--bg-0);color:var(--text-0);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;}
+#app{display:flex;height:100vh;overflow:hidden;}
+
+.sidebar{width:200px;flex-shrink:0;background:var(--bg-1);border-right:1px solid var(--border-soft);
+  display:flex;flex-direction:column;padding:16px 0;overflow-y:auto;}
+.brand{padding:0 16px 16px 16px;border-bottom:1px solid var(--border-soft);margin-bottom:8px;}
+.brand-name{font-weight:700;font-size:15px;letter-spacing:0.3px;}
+.brand-name span{color:var(--accent);}
+.brand-sub{font-size:9.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+.nav-item{padding:9px 16px;color:var(--text-1);cursor:pointer;font-size:12.5px;border-left:2px solid transparent;
+  display:flex;align-items:center;gap:8px;}
+.nav-item:hover{background:var(--bg-2);color:var(--text-0);}
+.nav-item.active{background:var(--bg-2);color:var(--text-0);border-left-color:var(--accent);font-weight:600;}
+.nav-section-title{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--text-2);
+  padding:12px 16px 4px 16px;}
+.saved-list{overflow-y:auto;}
+.saved-item{padding:8px 16px;font-size:11.5px;color:var(--text-1);cursor:pointer;border-left:2px solid transparent;}
+.saved-item:hover{background:var(--bg-2);color:var(--text-0);}
+.saved-item .sf-name{color:var(--text-0);font-weight:500;}
+.saved-item .sf-meta{color:var(--text-2);font-size:10px;margin-top:1px;}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.topbar{background:var(--bg-1);border-bottom:1px solid var(--border-soft);padding:11px 20px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.topbar-title{font-weight:700;font-size:14.5px;margin-right:6px;white-space:nowrap;}
+.pill-badge{background:var(--accent-dim);color:var(--accent);font-size:9.5px;padding:3px 9px;border-radius:10px;
+  text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+.spacer{flex:1;}
+.btn{background:var(--bg-3);border:1px solid var(--border);color:var(--text-0);padding:7px 13px;
+  border-radius:6px;font-size:12px;cursor:pointer;font-weight:500;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.btn:hover{background:#252b38;border-color:#3a4155;}
+.btn-primary{background:var(--accent);color:#06231a;border-color:var(--accent);font-weight:700;}
+.btn-primary:hover{background:#5edcae;}
+.btn-danger-ghost{color:var(--danger);}
+.btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 20px 60px 20px;}
+.card{background:var(--bg-1);border:1px solid var(--border-soft);border-radius:10px;padding:15px 17px;margin-bottom:14px;}
+.card-title{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--text-2);font-weight:700;
+  margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.field-row{display:flex;flex-wrap:wrap;gap:14px;}
+.field{display:flex;flex-direction:column;gap:5px;flex:1 1 130px;max-width:220px;}
+.field.grow{flex:2 1 200px;max-width:none;}
+.field label{font-size:10px;color:var(--text-2);text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap;}
+input,select{background:var(--bg-0);border:1px solid var(--border);color:var(--text-0);
+  padding:8px 10px;border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;}
+input:focus,select:focus{outline:none;border-color:var(--accent-blue);}
+input[type=number]{font-family:var(--mono);}
+
+.map-wrap{height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--border-soft);position:relative;}
+#map{height:100%;width:100%;background:#0b0d12;}
+.map-hint{position:absolute;bottom:10px;left:10px;background:rgba(11,13,18,0.88);border:1px solid var(--border);
+  padding:6px 10px;border-radius:6px;font-size:11px;color:var(--text-1);z-index:1000;}
+.map-toolbar{position:absolute;top:10px;left:10px;z-index:1000;display:flex;gap:6px;flex-wrap:wrap;max-width:70%;}
+.map-toolbar .btn{padding:6px 10px;font-size:11px;}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;}
+th{text-align:left;color:var(--text-2);font-weight:600;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:0.4px;padding:7px 7px;border-bottom:1px solid var(--border-soft);font-family:'Inter',sans-serif;}
+td{padding:6px 7px;border-bottom:1px solid var(--border-soft);color:var(--text-0);white-space:nowrap;}
+tr:hover td{background:var(--bg-2);}
+td input{width:100%;min-width:50px;padding:5px 7px;font-size:11.5px;background:transparent;border:1px solid transparent;}
+td input:hover{border-color:var(--border);}
+td input:focus{background:var(--bg-0);border-color:var(--accent-blue);}
+.wp-name-input{min-width:85px !important;font-family:'Inter',sans-serif !important;}
+.small-btn{background:none;border:none;color:var(--text-2);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:4px;}
+.small-btn:hover{background:var(--bg-3);color:var(--text-0);}
+.total-row td{border-top:1px solid var(--border);font-weight:700;color:var(--accent);background:var(--bg-2);}
+.manual-tag{font-size:9px;color:var(--warn);border:1px solid var(--warn);padding:1px 5px;border-radius:8px;margin-left:5px;}
+.auto-tag{font-size:9px;color:var(--accent);border:1px solid var(--accent-dim);padding:1px 5px;border-radius:8px;margin-left:5px;}
+.ok-tag{font-size:10px;color:var(--accent);font-weight:700;}
+.bad-tag{font-size:10px;color:var(--danger);font-weight:700;}
+
+.empty-state{color:var(--text-2);font-size:12px;text-align:center;padding:22px 10px;}
+.status-line{font-size:11px;color:var(--text-2);margin-top:8px;line-height:1.5;}
+.status-line.ok{color:var(--accent);}
+.status-line.err{color:var(--danger);}
+.status-line.warn{color:var(--warn);}
+
+.mnb-grid{display:grid;grid-template-columns:1fr 320px;gap:18px;}
+@media (max-width:900px){.mnb-grid{grid-template-columns:1fr;}}
+.limit-bar{height:5px;background:var(--bg-3);border-radius:3px;overflow:hidden;margin-top:4px;}
+.limit-fill{height:100%;background:var(--accent);}
+.limit-fill.over{background:var(--danger);}
+
+.tabs-locked{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.tab-locked{background:var(--bg-1);border:1px solid var(--border-soft);color:var(--text-2);
+  padding:8px 14px;border-radius:6px;font-size:12px;cursor:not-allowed;display:flex;align-items:center;gap:6px;}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg-3);border:1px solid var(--border);
+  padding:10px 16px;border-radius:8px;font-size:12px;color:var(--text-0);z-index:2000;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);opacity:0;transform:translateY(8px);transition:all 0.25s;max-width:320px;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-track{background:var(--bg-0);}
+::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:5px;}
+
+/* ---- Performances (décollage / atterrissage) ---- */
+.perf-tabs{display:flex;gap:8px;margin-bottom:14px;}
+.perf-tabs .btn{flex:1;justify-content:center;}
+.perf-speeds{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.perf-spd{flex:1;min-width:90px;background:var(--bg-0);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
+.perf-spd .k{font-size:9.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;}
+.perf-spd .v{font-family:var(--mono);font-size:16px;color:var(--text-0);margin-top:2px;}
+.perf-big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.perf-box{background:var(--bg-0);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.perf-box .k{font-size:9.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;}
+.perf-box .v{font-family:var(--mono);font-weight:700;font-size:22px;color:var(--text-0);margin-top:4px;}
+.perf-box .x{font-size:10.5px;color:var(--text-2);margin-top:2px;}
+.perf-box.accent .v{color:var(--accent);}
+.perf-verdict{font-family:var(--mono);font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.perf-verdict.ok{color:var(--accent);background:rgba(79,209,165,.12);border:1px solid rgba(79,209,165,.35);}
+.perf-verdict.warn{color:var(--warn);background:rgba(224,168,86,.12);border:1px solid rgba(224,168,86,.35);}
+.perf-verdict.bad{color:var(--danger);background:rgba(224,104,95,.14);border:1px solid rgba(224,104,95,.4);}
+.perf-rwybox{background:var(--bg-0);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;}
+.perf-rwyhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:6px;}
+.perf-rwyhead .t{font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;}
+svg.perf-rwy{width:100%;height:auto;display:block;font-family:var(--mono);}
+.perf-notes{margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--text-1);line-height:1.6;}
+.perf-notes .nw{color:var(--warn);}
+.perf-notes .ne{color:var(--danger);}
+.perf-src{font-size:10.5px;color:var(--accent-blue);margin-top:4px;}
+details.perf-method{margin-top:12px;border:1px solid var(--border-soft);border-radius:8px;background:var(--bg-0);}
+details.perf-method summary{cursor:pointer;padding:9px 12px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent-blue);list-style:none;}
+details.perf-method summary::-webkit-details-marker{display:none;}
+details.perf-method .body{padding:0 13px 12px;font-family:var(--mono);font-size:11px;color:var(--text-1);line-height:1.65;}
+details.perf-method .body b{color:var(--text-0);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* Storage abstraction: uses Claude's window.storage when running as an artifact,
+   falls back to the browser's localStorage when running as a standalone hosted page. */
+const appStorage = (window.storage && typeof window.storage.get === 'function')
+  ? window.storage
+  : {
+      async get(key){ const v = localStorage.getItem(key); return v===null ? null : {key, value:v}; },
+      async set(key, value){ localStorage.setItem(key, value); return {key, value}; },
+      async delete(key){ localStorage.removeItem(key); return {key, deleted:true}; },
+      async list(prefix){
+        const keys = [];
+        for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(!prefix || k.startsWith(prefix)) keys.push(k); }
+        return { keys };
+      }
+    };
+
+/* ============================= AIRCRAFT DATA (from Cannes Aviation M&B workbooks) ============================= */
+const AIRCRAFT_DB = {
+  DA40: {
+    label: 'DA40 - Diamond DA40', fuelType:'AVGAS', kgPerUSG: 3.0,
+    cruiseUSGh: 5.2, cruisePct:'70%', taxiUSG: 0.5, finalReserveMin: 45, finalReserveUSG: 4, holdUSGh: 3.5,
+    climbSpeedKt: 85, climbFpmDefault: 600, climbFpmByTail: {'F-HOVE':700, 'F-GZMP':700}, climbUSGh: 6.5, descentUSGh: 3.5,
+    maxZFM: null, maxTOM: 1150, maxLDG: 1150,
+    stations: [
+      {key:'frontSeats', label:'Sièges avant', arm:2.3, max:null, def:150},
+      {key:'rearSeats',  label:'Sièges arrière', arm:3.25, max:null, def:0},
+      {key:'cabinBag',   label:'Bagage cabine', arm:3.65, max:30, def:0},
+    ],
+    fuelStations: [
+      {key:'fuelMain', label:'Carburant', arm:2.63, usableKg:84, usableUSG:28, def:20},
+    ],
+    envelope: [[2.40,850],[2.40,980],[2.465,1150],[2.59,1150],[2.59,850]],
+    registrations: [
+      {tail:'F-GUVQ', mass:802,   moment:1934.09},
+      {tail:'F-GUVN', mass:805.17,moment:1935.64},
+      {tail:'F-HDAI', mass:839,   moment:2047.14},
+      {tail:'F-HDAZ', mass:834,   moment:2033.71},
+      {tail:'F-HBOX', mass:840.5, moment:2052.08},
+      {tail:'F-HEAR', mass:805.3, moment:1943.10},
+      {tail:'F-HOVE', mass:846,   moment:2053.81},
+      {tail:'F-GZMP', mass:849,   moment:2078.825},
+    ],
+    /* Performance décollage/atterrissage — voir bloc PERF_DA40 plus bas.
+       F-HOVE et F-GZMP sont motorisés TAE 125-02-114 (155 HP, STC 10036328) et disposent
+       de tables de décollage exactes dans le supplément AFM/POH. Le reste de la flotte est
+       motorisé TAE 125-01 (135 HP) et ne dispose que d'un abaque (nomogramme) dans l'AFM de
+       base — le décollage y est donc estimé. L'atterrissage vient de l'abaque AFM de base
+       (valeurs ISA/MSL imprimées) pour toute la flotte, quel que soit le moteur. */
+    perf114Tails: ['F-HOVE', 'F-GZMP'],
+  },
+  DA42: {
+    label: 'DA42 - Diamond DA42 Twin Star', fuelType:'JET A1', kgPerUSG: 3.03,
+    cruiseUSGh: null, cruisePct:null, taxiUSG: 0.5, finalReserveMin: 45, finalReserveUSG: null, holdUSGh: null,
+    perfDataMissing: true,
+    maxZFM: 1650, maxTOM: 1785, maxLDG: 1700,
+    stations: [
+      {key:'frontSeats', label:'Sièges avant', arm:2.3, max:null, def:150},
+      {key:'rearSeats',  label:'Sièges arrière', arm:3.25, max:null, def:0},
+      {key:'noseBag',    label:'Bagage avant (nez)', arm:0.6, max:30, def:0},
+      {key:'cabinBag',   label:'Bagage cabine', arm:3.89, max:45, def:0},
+      {key:'extBag',     label:'Bagage extension', arm:4.54, max:18, def:0},
+      {key:'deicing',    label:'Liquide dégivrage', arm:1.0, max:null, def:0},
+    ],
+    fuelStations: [
+      {key:'fuelMain', label:'Carburant MAIN', arm:2.63, usableKg:152, usableUSG:50,   def:40},
+      {key:'fuelAux',  label:'Carburant AUX',  arm:3.2,  usableKg:80,  usableUSG:26.4, def:0},
+    ],
+    envelope: [[2.35,1250],[2.35,1468],[2.40,1785],[2.49,1785],[2.49,1600],[2.42,1250]],
+    registrations: [
+      {tail:'F-HCAN', mass:1263.5, moment:3064.75},
+      {tail:'F-HCAC', mass:1316.5, moment:3172.4},
+      {tail:'F-HBCD', mass:1324.5, moment:3206.9},
+    ]
+  }
+};
+
+/* ============================= PERFORMANCE DA40 D (décollage / atterrissage) =============================
+   Sources :
+   - F-HOVE / F-GZMP (TAE 125-02-114, 155 HP, STC 10036328) : tables EXACTES du supplément AFM/POH
+     (Doc. 50-0310-500, chap. 5(a)/5(b) selon hélice) — reproduites intégralement ci-dessous.
+   - Reste de la flotte (TAE 125-01, 135 HP) : décollage NON tabulé dans l'AFM — uniquement un abaque
+     (nomogramme 3 panneaux, AFM DA 40 D de base, Doc. 6.01.05-E Rev.8, p.5-12/5-13). Faute de pouvoir
+     digitaliser un nomogramme point par point de façon fiable, la forme (variation avec masse/altitude/
+     température) est reprise de la table -114 ci-dessus (même cellule/aérodynamique, seule la puissance
+     change), et mise à l'échelle par un facteur calibré sur les DEUX exemples numériques imprimés dans
+     l'abaque de base lui-même :
+       · Roulage : PA 6000ft, OAT 10°C, 1010 kg, vent debout 15 kt → 260 m  ⇒ K_ROLL = 1.109
+       · Distance/obstacle 15 m : PA 4000ft, OAT 22°C, 1070 kg, vent debout 10 kt → 600 m ⇒ K_OBST = 1.250
+     C'est donc une ESTIMATION, explicitement marquée comme telle dans l'UI — à recouper avec l'abaque
+     papier avant tout vol réel.
+   - Atterrissage : valeurs ISA/MSL imprimées en toutes lettres dans l'AFM de base pour TOUTE la flotte
+     (indépendant du moteur) : volets LDG 744 m / 287 m roulage ; volets UP 916 m / 304 m roulage
+     (Doc. 6.01.05-E Rev.8, §5.3.11/5.3.12), corrigées ensuite pour masse/densité/vent/piste. */
+const PERF_DA40 = (function(){
+  const PA=[0,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000];
+  const D5a=[0,10,20,30], D5b=[0,10,20,30,35];
+  // Table 5(a) — hélice MTV-6-A/187-129 — [roll_m, over15m_m] par palier ISA+x°C
+  const t5a={
+   980:[[208,336,225,363,242,392,260,421],[220,356,237,384,256,414,274,446],[233,376,251,406,270,438,290,471],[247,398,266,430,286,464,307,499],[261,422,281,455,303,491,325,528],[277,447,298,482,321,520,344,559],[293,473,316,511,340,551,365,593],[317,511,341,552,367,595,395,641],[343,553,369,597,397,644,427,693],[374,605,403,653,434,705,466,758],[409,663,441,715,474,771,509,830]],
+   1000:[[220,355,237,383,255,413,274,444],[232,375,250,405,269,436,289,470],[246,397,265,428,285,462,306,497],[260,420,280,453,302,489,324,526],[275,444,297,480,319,517,343,557],[292,471,314,508,338,548,363,589],[309,499,333,538,358,580,385,625],[334,539,360,582,387,627,416,675],[361,583,389,629,419,678,450,730],[394,638,425,689,457,743,491,799],[431,698,464,754,500,813,536,875]],
+   1150:[[316,510,340,551,366,594,393,639],[334,539,360,582,387,628,416,675],[353,570,381,616,410,664,440,715],[374,604,403,652,434,703,466,756],[396,639,427,690,459,744,493,800],[419,677,452,731,486,788,522,848],[444,717,479,774,515,835,553,898],[480,775,518,837,557,902,598,971],[519,838,560,905,602,976,647,1050],[567,917,611,990,658,1068,706,1149],[620,1004,688,1084,718,1169,771,1258]]
+  };
+  // Table 5(b) — hélice MTV-6-A/190-69
+  const t5b={
+   980:[[182,302,194,322,207,344,213,355,239,399],[192,319,205,341,219,364,225,376,253,422],[203,338,217,361,232,385,238,398,268,448],[215,357,230,382,245,408,253,421,284,474],[227,378,243,404,260,433,268,446,301,503],[241,401,258,428,276,459,284,473,319,533],[255,424,273,454,292,486,301,502,339,566],[276,459,295,491,316,526,326,543,367,613],[298,496,319,531,342,569,352,587,397,664],[326,542,349,581,374,623,385,643,435,726],[356,593,382,636,409,682,421,703,475,796]],
+   1050:[[217,361,232,385,247,412,255,425,286,477],[230,382,245,408,262,436,269,449,303,506],[243,404,259,431,277,461,285,476,321,535],[257,428,275,457,294,488,302,504,340,567],[272,453,291,484,311,518,320,534,360,602],[288,479,308,513,330,549,339,566,382,638],[305,508,327,543,350,582,360,600,405,677],[330,549,353,588,378,630,389,649,439,733],[357,594,382,636,410,681,421,703,475,794],[390,649,418,695,448,745,461,769,520,869],[426,709,457,761,490,816,504,841,569,952]],
+   1150:[[275,458,294,488,314,522,343,571,362,605],[291,484,311,516,332,552,363,605,383,640],[308,512,329,547,351,584,384,641,406,678],[326,542,348,579,372,619,407,679,430,719],[345,573,369,613,394,656,432,720,456,762],[365,607,390,649,418,695,458,763,484,808],[387,643,414,688,443,737,486,810,513,858],[418,696,448,744,479,798,526,877,556,929],[452,752,484,805,519,863,569,949,602,1006],[494,822,529,881,567,944,623,1039,659,1101],[540,899,578,963,620,1034,681,1137,721,1206]]
+  };
+  const VR114={980:54,1000:55,1050:55,1150:59}, VCL114={980:59,1000:60,1050:60,1150:66};
+  const VR01={850:49,1000:55,1150:59}, VCL01={850:54,1000:60,1150:66};
+  const K_ROLL01=1.109, K_OBST01=1.250; // calibrés sur les exemples chiffrés de l'abaque AFM de base (voir en-tête)
+  const LDG_BASE={ LDG:{roll:287,tot:744}, UP:{roll:304,tot:916} }; // ISA/MSL, 1150 kg (AFM de base, §5.3.11/5.3.12)
+
+  // ---- Montée initiale (Take-off climb, Flaps T/O, MAX power) — Table 5(a)-7 / 5(b)-7, 1150 kg uniquement ----
+  // Rate of climb [ft/min] par PA (0..10000 ft, grille PA commune) x écart ISA (colonnes)
+  const D5a_CL=[0,10,20,30], D5b_CL=[0,10,20,30,35];
+  const climb5a=[[646,630,614,598],[645,629,613,597],[643,627,612,596],[642,626,610,594],[641,625,609,593],[640,624,608,592],[638,622,606,590],[637,621,605,589],[636,619,603,587],[614,598,582,567],[587,572,557,541]];
+  const climb5b=[[769,766,758,705,661],[766,764,756,702,659],[764,761,753,700,656],[762,759,751,697,654],[759,757,748,695,651],[757,754,746,692,649],[754,751,743,689,646],[752,749,740,687,643],[749,746,738,684,640],[728,725,716,664,621],[707,704,695,643,601]];
+  const VCLIMB_INIT_KIAS=66; // Airspeed for initial climb à 1150 kg, identique tables 5(a)-7 et 5(b)-7
+
+  // ---- Croisière — Table 5(a)-11 / 5(b)-11, réservoirs standard ----
+  // KTAS par [PA, %puissance]. Débit essentiellement indépendant de PA (fonction du %puissance seul).
+  const cruiseTAS5a={
+    100:[[0,140],[2000,143],[4000,146],[6000,148]],
+    90:[[0,135],[2000,137],[4000,140],[6000,142],[8000,145],[10000,148],[12000,150]],
+    80:[[0,129],[2000,131],[4000,133],[6000,135],[8000,138],[10000,140],[12000,143],[14000,145],[16000,148]],
+    70:[[0,122],[2000,124],[4000,126],[6000,128],[8000,130],[10000,132],[12000,134],[14000,137],[16000,139]],
+    60:[[0,114],[2000,115],[4000,117],[6000,119],[8000,121],[10000,123],[12000,125],[14000,127],[16000,129]],
+    50:[[0,104],[2000,105],[4000,107],[6000,109],[8000,110],[10000,112],[12000,113],[14000,115],[16000,117]]
+  };
+  const cruiseTAS5b={
+    100:[[0,143],[2000,145],[4000,148],[6000,151],[8000,154]],
+    90:[[0,137],[2000,140],[4000,142],[6000,145],[8000,148],[10000,150],[12000,153]],
+    80:[[0,131],[2000,133],[4000,136],[6000,138],[8000,141],[10000,144],[12000,146],[14000,149],[16000,152]],
+    70:[[0,124],[2000,126],[4000,129],[6000,131],[8000,133],[10000,136],[12000,138],[14000,141],[16000,143]],
+    60:[[0,117],[2000,118],[4000,120],[6000,123],[8000,125],[10000,127],[12000,129],[14000,131],[16000,133]],
+    50:[[0,107],[2000,109],[4000,111],[6000,112],[8000,114],[10000,115],[12000,117],[14000,118],[16000,120]]
+  };
+  // Débit carburant par %puissance (identique 5(a)/5(b), même moteur) — l/h et US gal/h
+  const FUEL_FLOW_BY_LOAD={50:{lh:15.3,usgh:4.0},60:{lh:18.6,usgh:4.9},70:{lh:22.1,usgh:5.8},80:{lh:25.8,usgh:6.8},90:{lh:29.6,usgh:7.8},100:{lh:33.6,usgh:8.9}};
+
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  function bracket(grid,v){
+    if(v<=grid[0])return[0,0,0];
+    if(v>=grid[grid.length-1])return[grid.length-1,grid.length-1,0];
+    for(let i=0;i<grid.length-1;i++) if(v<=grid[i+1]) return[i,i+1,(v-grid[i])/(grid[i+1]-grid[i])];
+  }
+  function interpTable(tbl,dGrid,paV,dISA){
+    const dC=Math.max(0,dISA);
+    const[p0,p1,pf]=bracket(PA,paV);
+    const[d0,d1,df]=bracket(dGrid,dC);
+    const cell=(pi,di,w)=>tbl[pi][di*2+w];
+    const atD=(pi,w)=>lerp(cell(pi,d0,w),cell(pi,d1,w),df);
+    return{roll:lerp(atD(p0,0),atD(p1,0),pf),obst:lerp(atD(p0,1),atD(p1,1),pf)};
+  }
+  function vAt(map,mass,ws){
+    let w0=ws[0],w1=ws[ws.length-1];
+    for(let i=0;i<ws.length-1;i++){if(mass>=ws[i]&&mass<=ws[i+1]){w0=ws[i];w1=ws[i+1];break;}}
+    return lerp(map[w0],map[w1],w1===w0?0:(mass-w0)/(w1-w0));
+  }
+  function takeoffShape(prop,mass,paV,dISA){
+    const tabs=prop==='5b'?t5b:t5a, dGrid=prop==='5b'?D5b:D5a;
+    const ws=Object.keys(tabs).map(Number).sort((a,b)=>a-b);
+    let w0=ws[0],w1=ws[ws.length-1];
+    for(let i=0;i<ws.length-1;i++){if(mass>=ws[i]&&mass<=ws[i+1]){w0=ws[i];w1=ws[i+1];break;}}
+    const a=interpTable(tabs[w0],dGrid,paV,dISA), b=interpTable(tabs[w1],dGrid,paV,dISA);
+    const t=w1===w0?0:(mass-w0)/(w1-w0);
+    return{roll:lerp(a.roll,b.roll,t),obst:lerp(a.obst,b.obst,t),wlo:ws[0],whi:ws[ws.length-1]};
+  }
+  const isaTemp=pa=>15-1.98*(pa/1000);
+  function sigma(pa,oat){const d=Math.pow(1-6.8756e-6*pa,5.2559);return d/((273.15+oat)/288.15);}
+  function vApp(mass){const p=[[850,58],[1000,63],[1150,71]];if(mass<=850)return 58;if(mass>=1150)return 71;for(let i=0;i<p.length-1;i++){if(mass<=p[i+1][0]){const[a,b]=p[i],[c,d]=p[i+1];return b+(d-b)*(mass-a)/(c-a);}}}
+  function windTO(hw){return hw>=0?Math.max(0.60,1-0.020*hw):1+0.035*(-hw);}
+  function windLDG(va,hw){return Math.pow(Math.max(0.30,(va-hw)/va),2);}
+  function grassLD(s){return s==='g5'?.05:s==='g10'?.15:s==='g25'?.25:0;}
+  // OPS 1.530 : herbe sèche x1.2, herbe mouillée x1.3, piste dure (sèche ou mouillée) x1.0. Appliqué au TOD (roulage + distance/obstacle).
+  function opsTOFactor(surf,pstate){ return surf!=='0' ? (pstate==='wet'?1.3:1.2) : 1.0; }
+
+  function climbVz(prop,paV,dISA){
+    const tbl = prop==='5b'?climb5b:climb5a, dGrid = prop==='5b'?D5b_CL:D5a_CL;
+    const dC=Math.max(0,dISA);
+    const[p0,p1,pf]=bracket(PA,paV);
+    const[d0,d1,df]=bracket(dGrid,dC);
+    const cell=(pi,di)=>tbl[pi][di];
+    const atD=(pi)=>lerp(cell(pi,d0),cell(pi,d1),df);
+    return lerp(atD(p0),atD(p1),pf);
+  }
+  function cruiseLookup(prop,load,paV){
+    const table = prop==='5b'?cruiseTAS5b:cruiseTAS5a;
+    const arr = table[load];
+    if(!arr) return null;
+    const maxPA = arr[arr.length-1][0];
+    const clamped = Math.min(paV, maxPA);
+    let ktas;
+    if(clamped<=arr[0][0]) ktas=arr[0][1];
+    else{
+      for(let i=0;i<arr.length-1;i++){
+        if(clamped<=arr[i+1][0]){ const t=(clamped-arr[i][0])/(arr[i+1][0]-arr[i][0]); ktas=lerp(arr[i][1],arr[i+1][1],t); break; }
+      }
+    }
+    const ff = FUEL_FLOW_BY_LOAD[load];
+    return{ ktas, lh:ff.lh, usgh:ff.usgh, outOfRange: paV>maxPA, maxPA };
+  }
+
+  function computeTO(eng,prop,mass,I){
+    let roll,obst,vr,vcl,est;
+    if(eng==='114'){
+      const r=takeoffShape(prop,mass,I.pa,I.isa);
+      roll=r.roll; obst=r.obst;
+      vr=Math.round(vAt(VR114,mass,[980,1000,1150])); vcl=Math.round(vAt(VCL114,mass,[980,1000,1150]));
+      est=false;
+    }else{
+      const r=takeoffShape('5a',mass,I.pa,I.isa); // forme reprise de la table -114 (même cellule), mise à l'échelle
+      roll=K_ROLL01*r.roll; obst=K_OBST01*r.obst;
+      vr=Math.round(vAt(VR01,mass,[850,1000,1150])); vcl=Math.round(vAt(VCL01,mass,[850,1000,1150]));
+      est=true;
+    }
+    let air=obst-roll; const notes=[];
+    const opsF = opsTOFactor(I.surf, I.state);
+    if(opsF!==1.0){
+      roll*=opsF; air*=opsF;
+      notes.push(['w', `OPS 1.530 — ${I.surf!=='0'?(I.state==='wet'?'herbe mouillée':'herbe sèche'):'piste dure'} : TOD ×${opsF}.`]);
+    }
+    let slF=1; if(I.slope>0){slF=1+0.05*I.slope; notes.push(['w',`Pente montante ${I.slope}% : TOD +${(0.05*I.slope*100).toFixed(0)} % (OPS 1.530 : +5 % par 1 % de pente).`]);}
+    roll*=slF; air*=slF;
+    const fw=windTO(I.head); roll*=fw; air*=fw;
+    obst=air+roll;
+    if(I.head<0) notes.push(['e',`Vent arrière ${Math.abs(I.head).toFixed(0)} kt : distance fortement majorée.`]);
+    if(mass>1150) notes.push(['e','Masse > MTOW 1150 kg.']);
+    if(I.pa>10000) notes.push(['e','Altitude pression > 10 000 ft : hors plage.']);
+    if(eng==='114'&&mass<980) notes.push(['e','Masse < 980 kg : hors table (extrapolée).']);
+    if(eng==='01'&&mass<850) notes.push(['w','Masse < 850 kg : hors plage VR/Vclimb (extrapolée).']);
+    return{roll,obst,vr,vcl,est,notes,avail:I.tora};
+  }
+  function computeLDG(flaps,mass,I){
+    const base=LDG_BASE[flaps];
+    const va=vApp(mass);
+    const fw=windLDG(va,I.head);
+    let roll=base.roll*(mass/1150)/I.sig*fw;
+    let tot =base.tot *(mass/1150)/I.sig*fw;
+    let air=tot-roll; const notes=[];
+    const g=grassLD(I.surf); if(g){roll*=(1+g); notes.push(['w',`Herbe : roulage +${(g*100)|0} %.`]);}
+    if(I.state==='wet'){roll*=1.15; notes.push(['w','Mouillé : +15 % roulage (prudentiel, hors AFM).']);}
+    let slF=1; if(I.slope<0){slF=1+0.05*Math.abs(I.slope); notes.push(['w',`Pente descendante ${Math.abs(I.slope)}% : +${(0.05*Math.abs(I.slope)*100).toFixed(0)} % (AFM : 2 % pente ≈ +10 %).`]);}
+    roll*=slF; air*=slF; tot=air+roll;
+    if(I.head<0) notes.push(['e',`Vent arrière ${Math.abs(I.head).toFixed(0)} kt : atterrissage fortement allongé.`]);
+    if(mass>1150) notes.push(['e','Masse > MLW 1150 kg.']);
+    return{roll,tot,vapp:Math.round(va),notes,avail:I.lda};
+  }
+  function computeClimb(prop,I,head){
+    const vz = climbVz(prop, I.pa, I.isa);
+    const tas = VCLIMB_INIT_KIAS / Math.sqrt(sigma(I.pa,I.oat));
+    const gsKt = Math.max(1, tas - head);
+    const gsFtMin = gsKt * 101.269;
+    const gamma = (vz/gsFtMin)*100;
+    return{ vz, iasKt:VCLIMB_INIT_KIAS, tas, gsKt, gamma };
+  }
+  function computeCruise(prop,load,paV){
+    return cruiseLookup(prop, load, paV);
+  }
+  return{isaTemp,sigma,computeTO,computeLDG,computeClimb,computeCruise};
+})();
+
+/* ============================= STATE ============================= */
+const state = {
+  flightId: null,
+  flightName: 'Nouveau vol',
+  eobtDate: new Date().toISOString().slice(0,10),
+  eobtTime: '09:00',
+  tas: 120,
+  descentTas: 115,
+  cruiseAlt: 3500,
+  variation: 1.5,
+  aircraft: 'DA40',
+  regTail: AIRCRAFT_DB.DA40.registrations[0].tail,
+  depIcao: '',
+  destIcao: '',
+  altnIcao: '',
+  pprDep: '',
+  pprDest: '',
+  crew: 1,
+  pax: 0,
+  boardingTime: '',
+  autoFlInfo: null,
+  todTargetIdx: null,
+  todMarginNM: 2,
+  todManualDistNM: null,
+  alternatePoint: null, // {lat, lon} — separate from the main route
+  placingAlternate: false,
+  weatherExtraIcao: [],
+  weatherData: { metars:{}, tafs:{}, fetchedAt:null, errors:[] },
+  weatherLoading: false,
+  waypoints: [],
+  legs: [],
+  savedFlights: [],
+  computeStatus: null,
+  fuelParams: { contingencyPct: 5, altnMin: 25, altnUSG: 2, additionalUSG: 0, extraUSG: 0,
+                manualCruiseUSGh: 0, manualTaxiUSG: 0.5, manualFinalReserveUSG: 4 },
+  mnb: { stations:{}, fuel:{} },
+  perf: { tab:'to', flaps:'LDG', prop:'5a', massTO:null, massLDG:null,
+          elev:0, qnhUnit:'hpa', qnh:1013, oat:15, qfu:0, tora:800, lda:800,
+          slope:0, slopeDir:'up', surf:'0', pstate:'dry', wdir:0, wspd:0,
+          cruisePA:null, loadPct:70,
+          oaCache:{}, oaPicker:null, oaApplied:null, oaLoading:false, eaipCache:{} },
+  baseLayer: 'oaci',
+  openaipApiKey: '',
+  mapView: null, // {lat,lng,zoom} — remembered across re-renders
+  mapBase: 'osm', // 'osm' | 'satellite'
+  mapOpenAipOn: false,
+};
+function resetMnbDefaults(){
+  const ac = AIRCRAFT_DB[state.aircraft];
+  state.mnb.stations = {}; state.mnb.fuel = {};
+  ac.stations.forEach(s => state.mnb.stations[s.key] = s.def);
+  ac.fuelStations.forEach(f => state.mnb.fuel[f.key] = f.def);
+}
+resetMnbDefaults();
+
+let map, mapMarkers = [], mapLine = null, osmLayer, satelliteLayer, layersControl;
+let openaipLayers = {};
+let uid = 1;
+
+/* ============================= STORAGE ============================= */
+async function loadSavedIndex(){
+  try{
+    const res = await appStorage.get('flights_index');
+    state.savedFlights = res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){ state.savedFlights = []; }
+  renderSidebarSaved();
+}
+async function saveCurrentFlight(){
+  if(state.waypoints.length < 2){ showToast('Ajoute au moins 2 points avant d’enregistrer.'); return; }
+  const id = state.flightId || ('fl_' + Date.now());
+  state.flightId = id;
+  const payload = {
+    id, name: state.flightName, eobtDate: state.eobtDate, eobtTime: state.eobtTime,
+    tas: state.tas, cruiseAlt: state.cruiseAlt, variation: state.variation,
+    aircraft: state.aircraft, regTail: state.regTail,
+    depIcao: state.depIcao, destIcao: state.destIcao, altnIcao: state.altnIcao,
+    pprDep: state.pprDep, pprDest: state.pprDest, crew: state.crew, pax: state.pax, boardingTime: state.boardingTime,
+    alternatePoint: state.alternatePoint, weatherExtraIcao: state.weatherExtraIcao,
+    waypoints: state.waypoints, fuelParams: state.fuelParams, mnb: state.mnb, perf: state.perf,
+    savedAt: new Date().toISOString()
+  };
+  try{
+    await appStorage.set('flight_' + id, JSON.stringify(payload));
+    const idx = state.savedFlights.filter(f => f.id !== id);
+    idx.unshift({ id, name: state.flightName, savedAt: payload.savedAt,
+      route: state.waypoints.map(w=>w.name).join(' → ') });
+    state.savedFlights = idx;
+    await appStorage.set('flights_index', JSON.stringify(idx));
+    showToast('Vol enregistré ✓');
+    renderSidebarSaved();
+  }catch(e){ showToast('Erreur d’enregistrement.'); }
+}
+async function loadFlight(id){
+  try{
+    const res = await appStorage.get('flight_' + id);
+    if(!res){ showToast('Vol introuvable.'); return; }
+    const f = JSON.parse(res.value);
+    state.flightId = f.id; state.flightName = f.name; state.eobtDate = f.eobtDate;
+    state.eobtTime = f.eobtTime; state.tas = f.tas; state.cruiseAlt = f.cruiseAlt;
+    state.variation = f.variation; state.aircraft = f.aircraft || 'DA40';
+    state.regTail = f.regTail || AIRCRAFT_DB[state.aircraft].registrations[0].tail;
+    state.depIcao = f.depIcao || ''; state.destIcao = f.destIcao || ''; state.altnIcao = f.altnIcao || '';
+    state.pprDep = f.pprDep || ''; state.pprDest = f.pprDest || ''; state.crew = f.crew || 1; state.pax = f.pax || 0;
+    state.alternatePoint = f.alternatePoint || null;
+    state.weatherExtraIcao = f.weatherExtraIcao || [];
+    state.boardingTime = f.boardingTime || '';
+    state.waypoints = f.waypoints; state.legs = [];
+    state.fuelParams = Object.assign({}, state.fuelParams, f.fuelParams||{});
+    state.mnb = f.mnb || {stations:{},fuel:{}};
+    if(!state.mnb.stations || Object.keys(state.mnb.stations).length===0) resetMnbDefaults();
+    state.perf = Object.assign({}, state.perf, f.perf||{});
+    renderAll();
+    showToast('Vol chargé ✓');
+  }catch(e){ showToast('Erreur de chargement.'); }
+}
+async function deleteFlight(id, evt){
+  if(evt) evt.stopPropagation();
+  try{
+    await appStorage.delete('flight_' + id);
+    state.savedFlights = state.savedFlights.filter(f=>f.id!==id);
+    await appStorage.set('flights_index', JSON.stringify(state.savedFlights));
+    renderSidebarSaved();
+    showToast('Vol supprimé.');
+  }catch(e){}
+}
+function newFlight(){
+  state.flightId = null; state.flightName = 'Nouveau vol';
+  state.waypoints = []; state.legs = []; state.computeStatus = null;
+  resetMnbDefaults();
+  state.perf.massTO = null; state.perf.massLDG = null;
+  renderAll();
+}
+
+/* ============================= GEO / NAV MATH ============================= */
+const toRad = d => d * Math.PI/180;
+const toDeg = r => r * 180/Math.PI;
+function norm360(d){ d = d % 360; if(d<0) d+=360; return d; }
+function distanceNM(a,b){
+  const R = 3440.065;
+  const dLat = toRad(b.lat-a.lat), dLon = toRad(b.lon-a.lon);
+  const la1=toRad(a.lat), la2=toRad(b.lat);
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+  return R * 2*Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
+}
+function trueCourse(a,b){
+  const la1=toRad(a.lat), la2=toRad(b.lat), dLon=toRad(b.lon-a.lon);
+  const y = Math.sin(dLon)*Math.cos(la2);
+  const x = Math.cos(la1)*Math.sin(la2) - Math.sin(la1)*Math.cos(la2)*Math.cos(dLon);
+  return norm360(toDeg(Math.atan2(y,x)));
+}
+function windTriangle(tc, tas, windDirFrom, windSpeed){
+  const diff = toRad(windDirFrom - tc);
+  const wca = toDeg(Math.asin( Math.max(-1,Math.min(1,(windSpeed/tas)*Math.sin(diff))) ));
+  const hdgTrue = norm360(tc + wca);
+  const gs = tas*Math.cos(toRad(wca)) - windSpeed*Math.cos(diff);
+  return { wca, hdgTrue, gs: Math.max(gs, 1) };
+}
+const LEVELS = [1000,975,950,925,900,850,800,700,600,500];
+function levelAltFt(hpa){ return (44330 * (1 - Math.pow(hpa/1013.25, 1/5.255))) * 3.28084; }
+function nearestLevel(altFt){
+  let best = LEVELS[0], bestDiff = Infinity;
+  for(const l of LEVELS){ const d = Math.abs(levelAltFt(l) - altFt); if(d < bestDiff){ bestDiff = d; best = l; } }
+  return best;
+}
+
+/* ============================= MEA / TERRAIN (obstacle corridor sampling) ============================= */
+function destinationPoint(lat, lon, bearingDeg, distNM){
+  const R = 3440.065;
+  const d = distNM/R;
+  const brng = toRad(bearingDeg);
+  const lat1 = toRad(lat), lon1 = toRad(lon);
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(brng));
+  const lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(d)*Math.cos(lat1), Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+  return { lat: toDeg(lat2), lon: toDeg(lon2) };
+}
+async function fetchElevations(points){
+  const results = new Array(points.length);
+  for(let i=0;i<points.length;i+=100){
+    const chunk = points.slice(i, i+100);
+    const lats = chunk.map(p=>p.lat.toFixed(4)).join(',');
+    const lons = chunk.map(p=>p.lon.toFixed(4)).join(',');
+    const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('elevation http '+res.status);
+    const data = await res.json();
+    data.elevation.forEach((e,j)=>{ results[i+j] = e; });
+  }
+  return results;
+}
+/* Samples a 20NM-wide corridor (10NM either side of track) along a leg and returns the
+   highest obstacle found, plus the MEA (obstacle + 1000ft if <5000ft, +2000ft if >=5000ft). */
+async function computeLegMEA(a, b){
+  const dist = distanceNM(a,b);
+  const tc = trueCourse(a,b);
+  const alongStep = Math.max(2, dist/6);
+  const offsets = [-10,-5,0,5,10];
+  const samples = [];
+  for(let d=0; d<=dist+0.01; d+=alongStep){
+    const dd = Math.min(d, dist);
+    const centerPt = destinationPoint(a.lat, a.lon, tc, dd);
+    offsets.forEach(off=>{
+      if(off===0){ samples.push(centerPt); }
+      else{ samples.push(destinationPoint(centerPt.lat, centerPt.lon, norm360(tc + (off<0?-90:90)), Math.abs(off))); }
+    });
+  }
+  const elevM = await fetchElevations(samples);
+  const validElevM = elevM.filter(v=>v!=null && !isNaN(v));
+  const maxElevFt = validElevM.length ? Math.max(...validElevM) * 3.28084 : 0;
+  const margin = maxElevFt < 5000 ? 1000 : 2000;
+  const mea = Math.ceil((maxElevFt + margin)/50)*50; // round up to nearest 50ft
+  return { maxElevFt, margin, mea };
+}
+/* Rounds a required pressure altitude up to the next valid VFR semicircular flight level.
+   Magnetic track 000-179° -> odd thousands +500ft. Magnetic track 180-359° -> even thousands +500ft. */
+function roundToSemicircular(requiredAlt, magneticTrack){
+  const wantOdd = (magneticTrack >= 0 && magneticTrack < 180);
+  let n = Math.ceil((requiredAlt - 500) / 1000);
+  if(n < 1) n = 1;
+  if(wantOdd && n % 2 === 0) n += 1;
+  if(!wantOdd && n % 2 !== 0) n += 1;
+  return n*1000 + 500;
+}
+async function computeAutoFL(){
+  if(state.legs.length === 0){ showToast('Calcule d\'abord le log de nav (MEA nécessaire pour le niveau auto).'); return; }
+  const routeMEA = Math.max(...state.legs.map(l=>l.mea));
+  const wpsWithAtmo = state.waypoints.filter(w=>w.qnh!=null && w.tempC!=null);
+  const qnh = wpsWithAtmo.length ? wpsWithAtmo.reduce((s,w)=>s+w.qnh,0)/wpsWithAtmo.length : 1013.25;
+  const tempAtLevel = wpsWithAtmo.length ? wpsWithAtmo.reduce((s,w)=>s+w.tempC,0)/wpsWithAtmo.length : null;
+  const pressureCorrection = Math.max(0, (1013 - qnh) * 30);
+  const isaTemp = 15 - 1.98*(routeMEA/1000);
+  const deltaT = tempAtLevel!=null ? Math.max(0, isaTemp - tempAtLevel) : 0;
+  const tempCorrection = routeMEA * deltaT * 0.004;
+  const requiredAlt = routeMEA + pressureCorrection + tempCorrection;
+  const mt = state.legs[0].mt;
+  const chosenFL = roundToSemicircular(requiredAlt, mt);
+  const oldCruiseAlt = state.cruiseAlt;
+  // propagate the new level to every waypoint that was still at the old cruise altitude
+  // (points deliberately set lower/higher — TOD, circuit altitude, etc. — are left untouched)
+  state.waypoints.forEach(wp=>{
+    if(Math.round(wp.alt ?? oldCruiseAlt) === Math.round(oldCruiseAlt)){ wp.alt = chosenFL; }
+  });
+  state.cruiseAlt = chosenFL;
+  state.autoFlInfo = { routeMEA, qnh: Math.round(qnh), tempAtLevel: tempAtLevel!=null?Math.round(tempAtLevel):null,
+    isaTemp: Math.round(isaTemp), deltaT: Math.round(deltaT*10)/10, pressureCorrection: Math.round(pressureCorrection),
+    tempCorrection: Math.round(tempCorrection), requiredAlt: Math.round(requiredAlt), mt: Math.round(mt), chosenFL };
+  showToast('Niveau de croisière calculé : ' + chosenFL + ' ft — recalcul du log de nav…');
+  await computeNavLog();
+}
+
+
+async function fetchWindAtPoint(lat, lon, level, dateStr, timeStr){
+  const hour = timeStr.slice(0,2);
+  const targetISO = `${dateStr}T${hour}:00`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`
+    + `&hourly=windspeed_${level}hPa,winddirection_${level}hPa,temperature_${level}hPa,pressure_msl&windspeed_unit=kn&timezone=UTC&forecast_days=16`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('http '+res.status);
+  const data = await res.json();
+  const times = data.hourly.time;
+  let idx = times.indexOf(targetISO);
+  if(idx === -1){
+    const target = new Date(targetISO+':00Z').getTime();
+    let bestI=0, bestD=Infinity;
+    times.forEach((t,i)=>{ const d=Math.abs(new Date(t+':00Z').getTime()-target); if(d<bestD){bestD=d;bestI=i;} });
+    idx = bestI;
+    if(bestD > 1000*60*60*24*3) throw new Error('hors plage');
+  }
+  const spd = data.hourly[`windspeed_${level}hPa`][idx];
+  const dir = data.hourly[`winddirection_${level}hPa`][idx];
+  const tempC = data.hourly[`temperature_${level}hPa`] ? data.hourly[`temperature_${level}hPa`][idx] : null;
+  const qnh = data.hourly.pressure_msl ? data.hourly.pressure_msl[idx] : null;
+  if(spd == null || dir == null) throw new Error('donnée manquante');
+  return { speed: Math.round(spd), dir: Math.round(dir), tempC, qnh };
+}
+
+async function computeNavLog(){
+  if(state.waypoints.length < 2){ showToast('Ajoute au moins 2 points.'); return; }
+  state.computeStatus = {type:'info', msg:'Récupération du vent (Open-Meteo)…'};
+  renderContent();
+  let anyManualFallback = false;
+  for(const wp of state.waypoints){
+    if(wp.manual) continue;
+    const level = nearestLevel(wp.alt ?? state.cruiseAlt);
+    try{
+      const w = await fetchWindAtPoint(wp.lat, wp.lon, level, state.eobtDate, state.eobtTime);
+      wp.windDir = w.dir; wp.windSpeed = w.speed; wp.windError = false;
+      wp.tempC = w.tempC; wp.qnh = w.qnh;
+    }catch(e){
+      wp.windError = true; anyManualFallback = true;
+      if(wp.windDir == null) wp.windDir = 0;
+      if(wp.windSpeed == null) wp.windSpeed = 0;
+    }
+  }
+  state.computeStatus = {type:'info', msg:'Analyse du relief le long de la route (corridor 20NM)…'};
+  renderContent();
+  const legs = [];
+  let cumMin = 0, cumNM = 0, cumFuelUSG = 0;
+  let meaError = false;
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const climbFpm = (ac.climbFpmByTail && ac.climbFpmByTail[state.regTail]) || ac.climbFpmDefault || null;
+  for(let i=0;i<state.waypoints.length-1;i++){
+    const a = state.waypoints[i], b = state.waypoints[i+1];
+    const aAlt = a.alt ?? state.cruiseAlt, bAlt = b.alt ?? state.cruiseAlt;
+    const dist = distanceNM(a,b);
+    const tc = trueCourse(a,b);
+    const d1 = toRad(a.windDir||0), d2 = toRad(b.windDir||0);
+    const sSin = Math.sin(d1)+Math.sin(d2), sCos = Math.cos(d1)+Math.cos(d2);
+    const windDir = norm360(toDeg(Math.atan2(sSin,sCos)));
+    const windSpeed = ((a.windSpeed||0)+(b.windSpeed||0))/2;
+    let phase = 'cruise', legTas = state.tas;
+    if(bAlt > aAlt + 50 && ac.climbSpeedKt){ phase = 'climb'; legTas = ac.climbSpeedKt; }
+    else if(bAlt < aAlt - 50){ phase = 'descent'; legTas = state.descentTas || state.tas; }
+    const { wca, hdgTrue, gs } = windTriangle(tc, legTas, windDir, windSpeed);
+    const magHdg = norm360(hdgTrue - state.variation);
+    const magTrack = norm360(tc - state.variation);
+    const eteMin = (dist/gs)*60;
+    cumMin += eteMin; cumNM += dist;
+    const fuelRate = phase==='climb' ? (ac.climbUSGh ?? ac.cruiseUSGh ?? state.fuelParams.manualCruiseUSGh)
+      : phase==='descent' ? (ac.descentUSGh ?? ac.cruiseUSGh ?? state.fuelParams.manualCruiseUSGh)
+      : (ac.cruiseUSGh ?? state.fuelParams.manualCruiseUSGh);
+    const fuelUSG = (eteMin/60) * fuelRate;
+    cumFuelUSG += fuelUSG;
+    let meaData = { maxElevFt:0, margin:1000, mea:0 };
+    try{ meaData = await computeLegMEA(a,b); }catch(e){ meaError = true; }
+    legs.push({ from:a.name, to:b.name, dist, tt:tc, mt:magTrack, windDir, windSpeed, wca,
+      th:hdgTrue, mh:magHdg, gs, eteMin, cumMin, cumNM, phase, legTas, alt:bAlt, climbFpm,
+      obstacleFt: meaData.maxElevFt, mea: meaData.mea, fuelUSG, cumFuelUSG });
+  }
+  state.legs = legs;
+  state.computeStatus = anyManualFallback
+    ? {type:'err', msg:'Vent indisponible pour un ou plusieurs points (hors plage de prévision Open-Meteo) — saisis-le manuellement dans le tableau ci-dessus, puis recalcule.'}
+    : {type:'ok', msg:'Log de nav calculé ✓ (vent Open-Meteo par point, altitude propre à chaque segment)'
+        + (meaError ? ' — relief indisponible pour au moins un segment, MEA à vérifier manuellement sur la carte.' : '')};
+  renderAll();
+}
+
+/* ============================= UI HELPERS ============================= */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtMin(min){ const h=Math.floor(min/60), m=Math.round(min%60); return (h>0?h+'h':'')+String(m).padStart(2,'0')+'min'; }
+
+function renderSidebarSaved(){
+  const el = document.getElementById('saved-list');
+  if(!el) return;
+  if(state.savedFlights.length===0){
+    el.innerHTML = '<div style="padding:8px 16px;color:var(--text-2);font-size:11px;">Aucun vol enregistré</div>';
+    return;
+  }
+  el.innerHTML = state.savedFlights.map(f => `
+    <div class="saved-item" onclick="loadFlight('${f.id}')">
+      <div class="sf-name">${escapeHtml(f.name)}</div>
+      <div class="sf-meta">${escapeHtml(f.route||'')}
+        <span class="small-btn" style="float:right;" onclick="deleteFlight('${f.id}',event)">✕</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderShell(){
+  document.getElementById('app').innerHTML = `
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-name">VFR<span>Nav</span></div>
+        <div class="brand-sub">Paul · Cannes Aviation</div>
+      </div>
+      <div class="nav-item active"><span>🧭</span> Nouveau vol</div>
+      <div class="nav-section-title">Vols enregistrés</div>
+      <div class="saved-list" id="saved-list"></div>
+    </div>
+    <div class="main">
+      <div class="topbar" id="topbar"></div>
+      <div class="content" id="content"></div>
+    </div>`;
+  document.querySelector('.nav-item').addEventListener('click', newFlight);
+}
+function renderTopbar(){
+  const el = document.getElementById('topbar');
+  el.innerHTML = `
+    <div class="topbar-title">✈️ ${escapeHtml(state.flightName)}</div>
+    <span class="pill-badge">VFR</span>
+    <div class="spacer"></div>
+    <button class="btn" id="btn-new">＋ Nouveau vol</button>
+    <button class="btn btn-primary" id="btn-save">💾 Enregistrer</button>`;
+  document.getElementById('btn-new').onclick = newFlight;
+  document.getElementById('btn-save').onclick = saveCurrentFlight;
+}
+
+/* ============================= CONTENT ============================= */
+function renderAutoFlDetail(){
+  const i = state.autoFlInfo;
+  const parity = (i.mt>=0 && i.mt<180) ? 'impair (route mag. 000-179°)' : 'pair (route mag. 180-359°)';
+  return `<div class="status-line">
+    MEA route (max des segments) : <b style="color:var(--text-0);">${Math.round(i.routeMEA)} ft</b>
+    · QNH estimé ${i.qnh} hPa → correction pression +${i.pressureCorrection} ft
+    · Temp. estimée ${i.tempAtLevel!=null?i.tempAtLevel+'°C':'n/a'} vs ISA ${i.isaTemp}°C (écart ${i.deltaT}°C) → correction température +${Math.round(i.tempCorrection)} ft
+    · Altitude pression requise ≈ ${i.requiredAlt} ft
+    · Route magnétique ${i.mt}° → niveau ${parity}
+    → <b style="color:var(--accent);">${i.chosenFL} ft</b> retenu.
+  </div>`;
+}
+
+/* Inserts a TOD (Top of Descent) point on the last leg, using the 3:1 rule:
+   distance (NM) = (alt initiale - alt cible) / 1000 * 3 */
+/* Walks backward from waypoints[targetIdx] through preceding legs, accumulating distance,
+   and returns the lat/lon that sits `distanceBackNM` before it, plus the array index
+   at which the new point should be spliced in. Returns null if the route isn't long enough. */
+function pointAtDistanceBeforeIndex(waypoints, targetIdx, distanceBackNM){
+  let remaining = distanceBackNM;
+  for(let i = targetIdx; i > 0; i--){
+    const a = waypoints[i-1], b = waypoints[i];
+    const legDist = distanceNM(a,b);
+    if(remaining <= legDist){
+      const tc = trueCourse(a,b);
+      const pos = destinationPoint(a.lat, a.lon, tc, legDist - remaining);
+      return { lat: pos.lat, lon: pos.lon, insertAt: i };
+    }
+    remaining -= legDist;
+  }
+  return null;
+}
+function todSuggestedDistance(targetIdx){
+  if(targetIdx <= 0 || targetIdx >= state.waypoints.length) return null;
+  const to = state.waypoints[targetIdx];
+  const toAlt = to.alt ?? state.cruiseAlt;
+  const fromAlt = state.cruiseAlt; // descent planned from the route's cruise level
+  if(toAlt >= fromAlt) return null;
+  const margin = state.todMarginNM ?? 2;
+  const deltaFL = (fromAlt - toAlt) / 100;
+  return Math.round((deltaFL / 3 + margin) * 10) / 10;
+}
+function insertTOD(){
+  if(state.waypoints.length < 2){ showToast('Il faut au moins 2 points.'); return; }
+  const targetIdx = state.todTargetIdx != null ? state.todTargetIdx : state.waypoints.length - 1;
+  const to = state.waypoints[targetIdx];
+  if(!to){ showToast('Point cible invalide.'); return; }
+  const toAlt = to.alt ?? state.cruiseAlt;
+  const fromAlt = state.cruiseAlt;
+  if(toAlt >= fromAlt){ showToast('Le point cible n\'est pas plus bas que le niveau de croisière — règle son altitude avant d\'insérer le TOD.'); return; }
+  const dist = state.todManualDistNM != null ? state.todManualDistNM : todSuggestedDistance(targetIdx);
+  if(!dist || dist <= 0){ showToast('Distance TOD invalide.'); return; }
+  const placement = pointAtDistanceBeforeIndex(state.waypoints, targetIdx, dist);
+  if(!placement){ showToast('La route n\'est pas assez longue avant ce point pour placer le TOD à ' + dist.toFixed(1) + ' NM (réduis la distance ou choisis un point cible plus loin).'); return; }
+  const id = uid++;
+  state.waypoints.splice(placement.insertAt, 0, { id, name:'TOD', lat: placement.lat, lon: placement.lon,
+    windDir:null, windSpeed:null, manual:false, alt: fromAlt });
+  state.legs = [];
+  state.todManualDistNM = null;
+  renderAll();
+  showToast('TOD inséré à ' + dist.toFixed(1) + ' NM avant ' + escapeHtml(to.name) + ' ✓');
+}
+
+/* Computes the Alternate fuel (D) from the last route waypoint to the placed diversion point:
+   distance/GS at cruise speed with fetched wind, plus a 15-min minimum approach allowance. */
+async function computeAlternateFuel(){
+  if(state.waypoints.length === 0){ showToast('Ajoute au moins ton point de destination sur la route.'); return; }
+  if(!state.alternatePoint){ showToast('Place d\'abord le point de dégagement sur la carte ("Placer le dégagement").'); return; }
+  const dest = state.waypoints[state.waypoints.length-1];
+  const altn = state.alternatePoint;
+  const dist = distanceNM(dest, altn);
+  const tc = trueCourse(dest, altn);
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const level = nearestLevel(dest.alt ?? state.cruiseAlt);
+  let windDir = 0, windSpeed = 0, windNote = 'vent non disponible, calcul sans vent';
+  try{
+    const w = await fetchWindAtPoint((dest.lat+altn.lat)/2, (dest.lon+altn.lon)/2, level, state.eobtDate, state.eobtTime);
+    windDir = w.dir; windSpeed = w.speed; windNote = `vent ${Math.round(w.dir)}°/${Math.round(w.speed)}kt`;
+  }catch(e){}
+  const { gs } = windTriangle(tc, state.tas, windDir, windSpeed);
+  const eteMin = (dist/gs)*60;
+  const approachMin = 15;
+  const totalMin = eteMin + approachMin;
+  const cruiseUSGh = ac.cruiseUSGh ?? state.fuelParams.manualCruiseUSGh;
+  const fuelUSG = (totalMin/60) * cruiseUSGh;
+  state.fuelParams.altnMin = Math.round(totalMin);
+  state.fuelParams.altnUSG = Math.round(fuelUSG*10)/10;
+  showToast(`Dégagement : ${dist.toFixed(1)} NM, ${windNote}, +15min approche → ${Math.round(totalMin)} min / ${fuelUSG.toFixed(1)} USG`);
+  renderContent();
+}
+
+/* ============================= METAR / TAF (aviationweather.gov, free, no key) ============================= */
+function weatherAirportList(){
+  const set = new Set();
+  [state.depIcao, state.destIcao, state.altnIcao].forEach(c => { if(c && c.trim()) set.add(c.trim().toUpperCase()); });
+  state.weatherExtraIcao.forEach(c => { if(c && c.trim()) set.add(c.trim().toUpperCase()); });
+  return Array.from(set);
+}
+async function refreshWeather(){
+  const list = weatherAirportList();
+  if(list.length===0){ showToast('Renseigne au moins un code OACI (Départ/Destination/Dégagement ou aérodrome ajouté).'); return; }
+  state.weatherLoading = true;
+  renderContent();
+  const errors = [];
+  let metars = {}, tafs = {};
+  try{
+    const res = await fetch(`https://aviationweather.gov/api/data/metar?ids=${list.join(',')}&format=json`);
+    if(res.ok){ const data = await res.json(); data.forEach(m => { metars[m.icaoId] = m; }); }
+    else errors.push('METAR: erreur HTTP ' + res.status);
+  }catch(e){ errors.push('METAR: requête échouée (' + e.message + ')'); }
+  try{
+    const res = await fetch(`https://aviationweather.gov/api/data/taf?ids=${list.join(',')}&format=json`);
+    if(res.ok){ const data = await res.json(); data.forEach(t => { tafs[t.icaoId] = t; }); }
+    else errors.push('TAF: erreur HTTP ' + res.status);
+  }catch(e){ errors.push('TAF: requête échouée (' + e.message + ')'); }
+  state.weatherData = { metars, tafs, fetchedAt: new Date(), errors };
+  state.weatherLoading = false;
+  renderContent();
+}
+function fltCatColor(cat){
+  if(cat==='VFR') return '#4fd1a5';
+  if(cat==='MVFR') return '#5b8cff';
+  if(cat==='IFR') return '#e0a856';
+  if(cat==='LIFR') return '#e0685f';
+  return '#6b7385';
+}
+function minutesAgo(iso){
+  if(!iso) return null;
+  return Math.round((Date.now() - new Date(iso).getTime())/60000);
+}
+function renderWeatherCard(){
+  const list = weatherAirportList();
+  const wd = state.weatherData;
+  const chips = list.map(code => `
+    <span class="manual-tag" style="font-size:11px;padding:4px 8px;">${escapeHtml(code)}
+      ${!(code===state.depIcao?.toUpperCase() || code===state.destIcao?.toUpperCase() || code===state.altnIcao?.toUpperCase())
+        ? `<button class="small-btn" data-remove-icao="${escapeHtml(code)}" style="margin-left:4px;">✕</button>` : ''}
+    </span>`).join(' ');
+  const rows = list.map(code=>{
+    const m = wd.metars[code], t = wd.tafs[code];
+    const age = m ? minutesAgo(m.reportTime || m.obsTime) : null;
+    return `
+    <div style="padding:10px 0;border-bottom:1px solid var(--border-soft);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <b style="color:var(--text-0);">${escapeHtml(code)}</b>
+        ${m && m.fltCat ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:${fltCatColor(m.fltCat)}22;color:${fltCatColor(m.fltCat)};border:1px solid ${fltCatColor(m.fltCat)};">${m.fltCat}</span>` : ''}
+        ${age!=null ? `<span class="status-line" style="margin:0;">il y a ${age} min</span>` : ''}
+      </div>
+      <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-0);white-space:pre-wrap;">${m ? escapeHtml(m.rawOb) : '<span style="color:var(--text-2);">METAR indisponible</span>'}</div>
+      <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-1);white-space:pre-wrap;margin-top:4px;">${t ? escapeHtml(t.rawTAF || t.rawOb || '') : '<span style="color:var(--text-2);">TAF indisponible</span>'}</div>
+    </div>`;
+  }).join('');
+  return `
+  <div class="card">
+    <div class="card-title">
+      <span>Météo — METAR / TAF</span>
+      <button class="btn btn-primary" id="btn-refresh-weather" ${state.weatherLoading?'disabled':''}>${state.weatherLoading?'⏳ Chargement…':'🔄 Actualiser'}</button>
+    </div>
+    <div class="field-row" style="margin-bottom:10px;align-items:center;">
+      ${chips || '<span class="status-line">Renseigne Départ/Destination/Dégagement dans Flight Info, ou ajoute un aérodrome ci-dessous.</span>'}
+    </div>
+    <div class="field-row" style="margin-bottom:10px;">
+      <div class="field"><label>Ajouter un aérodrome (OACI)</label>
+        <input id="in-weather-add" type="text" maxlength="4" style="text-transform:uppercase;" placeholder="LFMN"></div>
+      <div class="field" style="justify-content:flex-end;"><button class="btn" id="btn-weather-add" style="margin-top:18px;">＋ Ajouter</button></div>
+    </div>
+    ${list.length>0 ? rows : ''}
+    ${wd.fetchedAt ? `<div class="status-line ${wd.errors.length?'err':'ok'}">Actualisé à ${wd.fetchedAt.toLocaleTimeString('fr-FR')} UTC${wd.errors.length? ' — '+wd.errors.join(' · ') : ' ✓'}</div>` : ''}
+    <div class="status-line" style="margin-top:10px;">Source : aviationweather.gov (FAA/NOAA), gratuite et sans clé, agrège le réseau METAR/TAF mondial (dont la France). Ce n'est pas Aeroweb/SOFIA — recoupe toujours avec la source officielle avant le vol.</div>
+    <div class="field-row" style="margin-top:12px;">
+      <a class="btn" href="https://aviation.meteo.fr" target="_blank" rel="noopener" style="text-decoration:none;">☁️ Cartes officielles EUROC / TEMSI / WINTEM (Aeroweb)</a>
+    </div>
+    <div class="status-line">Les cartes EUROC/TEMSI/WINTEM et les messages complets (SIGMET/GAMET) sont sur Aeroweb, propriété de Météo-France — leur API existe mais nécessite un formulaire papier signé envoyé par courrier pour obtenir un identifiant serveur, donc pas d'intégration automatique possible ici. Le lien ouvre Aeroweb directement.</div>
+  </div>`;
+}
+
+function wireWeatherCard(){
+  const btnRefresh = document.getElementById('btn-refresh-weather');
+  if(btnRefresh) btnRefresh.onclick = refreshWeather;
+  const btnAdd = document.getElementById('btn-weather-add');
+  const inAdd = document.getElementById('in-weather-add');
+  if(btnAdd) btnAdd.onclick = ()=>{
+    const code = (inAdd.value||'').trim().toUpperCase();
+    if(code.length>=3 && !state.weatherExtraIcao.includes(code)){ state.weatherExtraIcao.push(code); renderContent(); }
+  };
+  document.querySelectorAll('[data-remove-icao]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.weatherExtraIcao = state.weatherExtraIcao.filter(c=>c!==btn.dataset.removeIcao);
+      renderContent();
+    });
+  });
+}
+
+function renderNotamLinks(){
+  const airports = [
+    { label:'Départ', code: state.depIcao },
+    { label:'Destination', code: state.destIcao },
+    { label:'Dégagement', code: state.altnIcao },
+  ].filter(a => a.code && a.code.trim() !== '');
+  if(airports.length===0) return '';
+  const links = airports.map(a =>
+    `<a class="btn" href="https://sofia-briefing.aviation-civile.gouv.fr/sofia/pages/notamsearchaero.html" target="_blank" rel="noopener" style="text-decoration:none;">📄 NOTAM ${escapeHtml(a.label)} (${escapeHtml(a.code.toUpperCase())})</a>`
+  ).join('');
+  return `<div class="field-row" style="margin-top:12px;">${links}</div>
+  <div class="status-line">SOFIA-Briefing n'accepte pas de code aérodrome en paramètre d'URL — le lien ouvre la recherche NOTAM, il faut saisir le code toi-même une fois sur place (aucune API publique disponible pour automatiser ça, voir échange précédent).</div>`;
+}
+
+function renderTodPanel(){
+  if(state.waypoints.length < 2) return '';
+  const defaultTarget = state.waypoints.length - 1;
+  const targetIdx = state.todTargetIdx != null ? state.todTargetIdx : defaultTarget;
+  const targetOptions = state.waypoints.map((wp,i)=> i===0 ? '' :
+    `<option value="${i}" ${i===targetIdx?'selected':''}>${escapeHtml(wp.name)} (${Math.round(wp.alt ?? state.cruiseAlt)} ft)</option>`).join('');
+  const suggested = todSuggestedDistance(targetIdx);
+  const distValue = state.todManualDistNM != null ? state.todManualDistNM : (suggested ?? '');
+  return `
+  <div class="card" style="background:var(--bg-2);margin-bottom:14px;">
+    <div class="card-title">Insérer un point TOD (Top of Descent)</div>
+    <div class="field-row">
+      <div class="field"><label>Descendre vers</label>
+        <select id="in-tod-target">${targetOptions}</select></div>
+      <div class="field"><label>Marge sécurité (NM)</label>
+        <input id="in-tod-margin" type="number" step="0.5" value="${state.todMarginNM}"></div>
+      <div class="field"><label>Distance TOD (NM) — modifiable</label>
+        <input id="in-tod-dist" type="number" step="0.1" value="${distValue}"
+          placeholder="${suggested!=null ? 'suggéré '+suggested+' NM' : 'cible pas plus basse que la croisière'}"></div>
+      <div class="field" style="justify-content:flex-end;">
+        <button class="btn btn-primary" id="btn-insert-tod" style="margin-top:18px;">↓ Insérer</button>
+      </div>
+    </div>
+    <div class="status-line">Suggestion = ΔFL/3 + marge, où ΔFL = (Niveau croisière − Alt. cible)/100. Peut remonter sur plusieurs segments si besoin. Tu peux écraser la valeur suggérée et poser le TOD où tu veux.</div>
+  </div>`;
+}
+
+function renderContent(){
+  const el = document.getElementById('content');
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const acOptions = Object.entries(AIRCRAFT_DB).map(([k,v])=>
+    `<option value="${k}" ${state.aircraft===k?'selected':''}>${v.label}</option>`).join('');
+  const regOptions = ac.registrations.map(r=>
+    `<option value="${r.tail}" ${state.regTail===r.tail?'selected':''}>${r.tail} (${r.mass} kg)</option>`).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">Flight Info</div>
+      <div class="field-row">
+        <div class="field grow"><label>Nom du vol</label>
+          <input id="in-name" type="text" value="${escapeHtml(state.flightName)}"></div>
+        <div class="field"><label>Départ (OACI)</label>
+          <input id="in-dep" type="text" maxlength="4" style="text-transform:uppercase;" placeholder="LFMD" value="${escapeHtml(state.depIcao)}"></div>
+        <div class="field"><label>Destination (OACI)</label>
+          <input id="in-dest" type="text" maxlength="4" style="text-transform:uppercase;" placeholder="LFHO" value="${escapeHtml(state.destIcao)}"></div>
+        <div class="field"><label>Dégagement (OACI)</label>
+          <input id="in-altn" type="text" maxlength="4" style="text-transform:uppercase;" placeholder="LFLU" value="${escapeHtml(state.altnIcao)}"></div>
+      </div>
+      <div class="field-row" style="margin-top:12px;">
+        <div class="field"><label>Date EOBT</label>
+          <input id="in-date" type="date" value="${state.eobtDate}"></div>
+        <div class="field"><label>EOBT (UTC)</label>
+          <input id="in-time" type="time" value="${state.eobtTime}"></div>
+        <div class="field"><label>Boarding (UTC)</label>
+          <input id="in-boarding" type="time" value="${escapeHtml(state.boardingTime)}"></div>
+        <div class="field"><label>Variation mag. (° Est +)</label>
+          <input id="in-var" type="number" step="0.1" value="${state.variation}"></div>
+        <div class="field" style="justify-content:flex-end;">
+          <button class="btn" id="btn-apply-dest" style="margin-top:18px;" ${state.waypoints.length===0?'disabled':''}>↳ Nommer le dernier point "${escapeHtml(state.destIcao)||'DEST'}"</button>
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:12px;">
+        <div class="field"><label>Crew</label>
+          <input id="in-crew" type="number" min="1" step="1" value="${state.crew}"></div>
+        <div class="field"><label>Pax number</label>
+          <input id="in-pax" type="number" min="0" step="1" value="${state.pax}"></div>
+        <div class="field"><label>PPR départ</label>
+          <input id="in-ppr-dep" type="text" placeholder="Non requis" value="${escapeHtml(state.pprDep)}"></div>
+        <div class="field"><label>PPR arrivée</label>
+          <input id="in-ppr-dest" type="text" placeholder="Non requis" value="${escapeHtml(state.pprDest)}"></div>
+      </div>
+      ${renderNotamLinks()}
+    </div>
+
+    <!-- Météo METAR/TAF masquée en attendant la réponse de Météo-France sur l'accès AEROWEB.
+         Code conservé dans renderWeatherCard()/refreshWeather() etc. pour réactivation rapide. -->
+
+    <div class="card">
+      <div class="card-title">Aircraft Info</div>
+      <div class="field-row">
+        <div class="field"><label>Type</label>
+          <select id="in-aircraft">${acOptions}</select></div>
+        <div class="field"><label>Immatriculation</label>
+          <select id="in-reg">${regOptions}</select></div>
+        <div class="field"><label>Vc croisière (kt)</label>
+          <input id="in-tas" type="number" value="${state.tas}"></div>
+        <div class="field"><label>Vc descente (kt)</label>
+          <input id="in-descent-tas" type="number" value="${state.descentTas}" title="Vitesse utilisée pour tout segment où l'altitude diminue entre deux points (~110-120kt)"></div>
+        <div class="field"><label>Niveau croisière (ft)</label>
+          <div style="display:flex;gap:6px;">
+            <input id="in-alt" type="number" step="100" value="${state.cruiseAlt}" style="flex:1;">
+            <button class="btn" id="btn-auto-fl" ${state.legs.length===0?'disabled':''} title="${state.legs.length===0?'Calcule d’abord le log de nav':'Calcule le niveau à partir de la MEA + corrections ISA + règle pair/impair'}">🧮 Auto</button>
+          </div>
+        </div>
+      </div>
+      ${ac.climbFpmDefault ? `<div class="status-line">Montée : ${ac.climbSpeedKt}kt @ ${(ac.climbFpmByTail && ac.climbFpmByTail[state.regTail]) || ac.climbFpmDefault} ft/min pour ${escapeHtml(state.regTail)}.</div>` : ''}
+      ${ac.perfDataMissing ? `<div class="status-line warn">Données de performance croisière ${ac.label.split(' ')[0]} non fournies — renseigne-les manuellement dans le Fuel Planning ci-dessous.</div>`:''}
+      ${state.autoFlInfo ? renderAutoFlDetail() : ''}
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Carte — clique pour poser un point VFR</span>
+        <span style="font-weight:400;text-transform:none;color:var(--text-2);">${state.waypoints.length} point(s)</span>
+      </div>
+      <div class="map-wrap">
+        <div class="map-toolbar">
+          <button class="btn" id="btn-center-lfmd">📍 LFMD Cannes</button>
+          <button class="btn ${state.placingAlternate?'btn-primary':''}" id="btn-place-altn">✈ ${state.placingAlternate?'Clique sur la carte…':'Placer le dégagement'}</button>
+          ${state.alternatePoint ? `<button class="btn btn-danger-ghost" id="btn-clear-altn">✕ Retirer le dégagement</button>` : ''}
+          <button class="btn btn-danger-ghost" id="btn-clear-wp">🗑 Vider les points</button>
+        </div>
+        <div id="map"></div>
+        <div class="map-hint">Clique sur la carte pour ajouter un point</div>
+      </div>
+      <div class="status-line warn">Fond de carte : seul OpenStreetMap fonctionne de façon fiable pour l'instant, Satellite (Esri) restera probablement noir ici (domaine bloqué par le bac à sable de l'artifact Claude). Pour OpenAIP : l'URL était fausse (ancienne API v1 obsolète, corrigée maintenant vers la couche combinée "openaip") — réessaie en zoomant assez près de Cannes (zoom 8+) pour voir apparaître les espaces aériens.</div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow"><label>Clé OpenAIP (gratuite — pour plus tard, hors artifact)</label>
+          <input id="in-openaipkey" type="text" placeholder="colle ici ta clé après inscription sur openaip.net" value="${escapeHtml(state.openaipApiKey)}"></div>
+        <div class="field" style="justify-content:flex-end;">
+          <button class="btn" id="btn-apply-openaipkey" style="margin-top:18px;">🔑 Appliquer (test)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Points de la navigation</div>
+      ${renderWaypointTable()}
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Log de nav</span>
+        <button class="btn btn-primary" id="btn-compute" ${state.waypoints.length<2?'disabled':''}>
+          ⚡ Calculer le log de nav</button>
+      </div>
+      ${renderTodPanel()}
+      ${renderNavLogTable()}
+      ${state.computeStatus ? `<div class="status-line ${state.computeStatus.type==='ok'?'ok':state.computeStatus.type==='err'?'err':''}">${escapeHtml(state.computeStatus.msg)}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fuel planning (Part-CAT) — ${ac.label}</div>
+      ${renderFuelTable()}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Mass &amp; Balance — ${ac.label} (${escapeHtml(state.regTail)})</div>
+      ${renderMnBSection()}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Performances décollage / atterrissage — ${ac.label}</div>
+      ${renderPerfSection()}
+    </div>
+  `;
+
+  const bind = (id, key, num) => {
+    const inp = document.getElementById(id);
+    if(!inp) return;
+    inp.addEventListener('change', e => {
+      state[key] = num ? parseFloat(e.target.value)||0 : e.target.value;
+      if(id==='in-name') renderTopbar();
+    });
+  };
+  bind('in-name','flightName',false);
+  bind('in-tas','tas',true);
+  bind('in-descent-tas','descentTas',true);
+  bind('in-alt','cruiseAlt',true);
+  bind('in-date','eobtDate',false);
+  bind('in-time','eobtTime',false);
+  bind('in-var','variation',true);
+  bind('in-boarding','boardingTime',false);
+  bind('in-crew','crew',true);
+  bind('in-pax','pax',true);
+  bind('in-ppr-dep','pprDep',false);
+  bind('in-ppr-dest','pprDest',false);
+  const bindIcao = (id, key) => {
+    const inp = document.getElementById(id);
+    inp.addEventListener('change', e => { state[key] = e.target.value.toUpperCase().trim(); renderContent(); });
+  };
+  bindIcao('in-dep','depIcao'); bindIcao('in-dest','destIcao'); bindIcao('in-altn','altnIcao');
+  const btnApplyDest = document.getElementById('btn-apply-dest');
+  if(btnApplyDest) btnApplyDest.onclick = ()=>{
+    if(state.waypoints.length===0) return;
+    state.waypoints[state.waypoints.length-1].name = state.destIcao || 'DEST';
+    renderAll();
+  };
+  document.getElementById('in-aircraft').addEventListener('change', e=>{
+    state.aircraft = e.target.value;
+    state.regTail = AIRCRAFT_DB[state.aircraft].registrations[0].tail;
+    resetMnbDefaults();
+    state.perf.massTO = null; state.perf.massLDG = null;
+    renderContent();
+  });
+  document.getElementById('in-reg').addEventListener('change', e=>{ state.regTail = e.target.value; renderContent(); });
+
+  document.getElementById('btn-compute').onclick = computeNavLog;
+  const btnInsertTod = document.getElementById('btn-insert-tod');
+  if(btnInsertTod) btnInsertTod.onclick = insertTOD;
+  const inTodTarget = document.getElementById('in-tod-target');
+  if(inTodTarget) inTodTarget.addEventListener('change', e=>{
+    state.todTargetIdx = parseInt(e.target.value);
+    state.todManualDistNM = null; // reset override when target changes, fall back to suggestion
+    renderContent();
+  });
+  const inTodMargin = document.getElementById('in-tod-margin');
+  if(inTodMargin) inTodMargin.addEventListener('change', e=>{
+    state.todMarginNM = parseFloat(e.target.value) || 0;
+    state.todManualDistNM = null;
+    renderContent();
+  });
+  const inTodDist = document.getElementById('in-tod-dist');
+  if(inTodDist) inTodDist.addEventListener('change', e=>{
+    state.todManualDistNM = e.target.value === '' ? null : parseFloat(e.target.value);
+    renderContent();
+  });
+  const btnAutoFl = document.getElementById('btn-auto-fl');
+  if(btnAutoFl) btnAutoFl.onclick = computeAutoFL;
+  document.getElementById('btn-center-lfmd').onclick = ()=> map.setView([43.5417,6.9531], 11);
+  document.getElementById('btn-clear-wp').onclick = ()=>{
+    if(confirm('Vider tous les points ?')){ state.waypoints=[]; state.legs=[]; renderAll(); }
+  };
+  const btnPlaceAltn = document.getElementById('btn-place-altn');
+  if(btnPlaceAltn) btnPlaceAltn.onclick = ()=>{ state.placingAlternate = !state.placingAlternate; renderContent(); };
+  const btnClearAltn = document.getElementById('btn-clear-altn');
+  if(btnClearAltn) btnClearAltn.onclick = ()=>{ state.alternatePoint = null; renderAll(); };
+  const btnOpenaipKey = document.getElementById('btn-apply-openaipkey');
+  if(btnOpenaipKey) btnOpenaipKey.onclick = async ()=>{
+    const val = document.getElementById('in-openaipkey').value.trim();
+    state.openaipApiKey = val;
+    rebuildOpenAipLayers();
+    try{ await appStorage.set('app_settings', JSON.stringify({openaipApiKey: val})); }catch(e){}
+    showToast(val ? 'Clé OpenAIP appliquée — active les overlays dans le sélecteur de couches.' : 'Clé OpenAIP retirée.');
+  };
+
+  wireWaypointRowEvents();
+  wireFuelInputs();
+  wireMnbInputs();
+  wirePerfInputs();
+  wireWeatherCard();
+  refreshMap();
+}
+
+/* ---------- waypoints table ---------- */
+function renderWaypointTable(){
+  if(state.waypoints.length===0){
+    return `<div class="empty-state">Aucun point pour l'instant — clique sur la carte ci-dessus pour placer ton premier point (départ).</div>`;
+  }
+  const rows = state.waypoints.map((wp,i)=>`
+    <tr data-wid="${wp.id}">
+      <td style="color:var(--text-2);">${i+1}</td>
+      <td><input class="wp-name-input" data-field="name" value="${escapeHtml(wp.name)}"></td>
+      <td>${wp.lat.toFixed(4)}</td>
+      <td>${wp.lon.toFixed(4)}</td>
+      <td><input data-field="alt" type="number" step="50" value="${wp.alt ?? state.cruiseAlt}" style="width:64px;"> ft</td>
+      <td>
+        <input data-field="windDir" type="number" min="0" max="360" step="1" value="${wp.windDir ?? ''}" placeholder="dir° True" style="width:56px;">
+        <span class="${wp.manual ? 'manual-tag':'auto-tag'}">${wp.manual?'manuel':'auto'}</span>
+        ${wp.manual ? `<button class="small-btn" data-act="reset-auto" title="Repasser en auto (revient chercher le vent Open-Meteo au prochain calcul)">↺ auto</button>` : ''}
+      </td>
+      <td><input data-field="windSpeed" type="number" min="0" value="${wp.windSpeed ?? ''}" placeholder="kt" style="width:50px;"></td>
+      <td>
+        <button class="small-btn" data-act="up" title="Monter">↑</button>
+        <button class="small-btn" data-act="down" title="Descendre">↓</button>
+        <button class="small-btn" data-act="del" title="Supprimer">✕</button>
+      </td>
+    </tr>`).join('');
+  return `<table>
+    <thead><tr><th>#</th><th>Nom</th><th>Lat</th><th>Lon</th><th>Alt</th><th>Vent dir (° True)</th><th>Vent (kt)</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function wireWaypointRowEvents(){
+  document.querySelectorAll('#content tr[data-wid]').forEach(tr=>{
+    const id = parseInt(tr.dataset.wid);
+    tr.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('change', e=>{
+        const wp = state.waypoints.find(w=>w.id===id);
+        const field = e.target.dataset.field;
+        if(field==='name'){ wp.name = e.target.value || wp.name; renderMapMarkers(); }
+        else if(field==='windDir'){
+          if(e.target.value === ''){ wp.windDir = null; }
+          else{
+            let v = parseFloat(e.target.value);
+            if(isNaN(v)) v = 0;
+            v = ((v % 360) + 360) % 360; // clamp into [0,360), reject negatives by wrapping
+            wp.windDir = v;
+          }
+          wp.manual = true;
+          renderContent();
+        }
+        else if(field==='windSpeed'){
+          let v = e.target.value === '' ? null : parseFloat(e.target.value);
+          if(v !== null && (isNaN(v) || v < 0)) v = 0;
+          wp.windSpeed = v;
+          wp.manual = true;
+          renderContent();
+        }
+        else if(field==='alt'){
+          let v = parseFloat(e.target.value);
+          if(isNaN(v)) v = state.cruiseAlt;
+          wp.alt = v;
+          state.legs = [];
+          renderContent();
+        }
+        else{ wp[field] = e.target.value === '' ? null : parseFloat(e.target.value); wp.manual = true; renderContent(); }
+      });
+    });
+    tr.querySelectorAll('button[data-act]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = state.waypoints.findIndex(w=>w.id===id);
+        const act = btn.dataset.act;
+        if(act==='del'){ state.waypoints.splice(idx,1); }
+        else if(act==='up' && idx>0){ [state.waypoints[idx-1],state.waypoints[idx]]=[state.waypoints[idx],state.waypoints[idx-1]]; }
+        else if(act==='down' && idx<state.waypoints.length-1){ [state.waypoints[idx+1],state.waypoints[idx]]=[state.waypoints[idx],state.waypoints[idx+1]]; }
+        else if(act==='reset-auto'){
+          const wp = state.waypoints[idx];
+          wp.manual = false; wp.windError = false;
+          showToast('Repassé en auto — reclique sur "Calculer le log de nav" pour récupérer le vent Open-Meteo.');
+        }
+        state.legs = [];
+        renderAll();
+      });
+    });
+  });
+}
+
+/* ---------- nav log table ---------- */
+function renderNavLogTable(){
+  if(state.legs.length===0){
+    return `<div class="empty-state">Clique sur « Calculer le log de nav » une fois tes points placés.</div>`;
+  }
+  const rows = state.legs.map(l=>{
+    const phaseIcon = l.phase==='climb' ? '↑' : l.phase==='descent' ? '↓' : '→';
+    const phaseTitle = l.phase==='climb' ? `Montée ${l.climbFpm||''} ft/min @ ${l.legTas}kt` : l.phase==='descent' ? `Descente @ ${l.legTas}kt` : `Croisière @ ${l.legTas}kt`;
+    return `
+    <tr>
+      <td style="color:var(--text-0);font-family:'Inter',sans-serif;">${escapeHtml(l.from)} → ${escapeHtml(l.to)}</td>
+      <td>${l.dist.toFixed(1)} NM</td>
+      <td title="${phaseTitle}">${Math.round(l.alt)} ft ${phaseIcon}</td>
+      <td>${Math.round(l.tt)}°</td>
+      <td>${Math.round(l.mt)}°</td>
+      <td>${Math.round(l.windDir)}°/${Math.round(l.windSpeed)}kt</td>
+      <td>${Math.round(l.wca)>=0?'+':''}${Math.round(l.wca)}°</td>
+      <td>${Math.round(l.th)}°</td>
+      <td style="color:var(--accent);font-weight:700;">${Math.round(l.mh)}°</td>
+      <td>${Math.round(l.gs)} kt</td>
+      <td>${fmtMin(l.eteMin)}</td>
+      <td>${fmtMin(l.cumMin)}</td>
+      <td style="color:var(--warn);">${Math.round(l.mea)} ft</td>
+      <td>${l.fuelUSG.toFixed(1)} USG</td>
+    </tr>`;}).join('');
+  const total = state.legs[state.legs.length-1];
+  return `<table>
+    <thead><tr><th>Segment</th><th>Dist</th><th>Alt</th><th>TT</th><th>MT</th><th>Wind</th><th>WCA</th><th>TH</th><th>MH</th><th>GS</th><th>ETE</th><th>Cumul</th><th>MEA</th><th>Fuel</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td>TOTAL</td><td>${total.cumNM.toFixed(1)} NM</td><td colspan="9"></td><td>${fmtMin(total.cumMin)}</td><td>max ${Math.round(Math.max(...state.legs.map(l=>l.mea)))} ft</td><td>${total.cumFuelUSG.toFixed(1)} USG</td></tr></tfoot>
+    </table>`;
+}
+
+/* ---------- fuel table ---------- */
+function renderFuelTable(){
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const fp = state.fuelParams;
+  const cruiseUSGh = ac.cruiseUSGh != null ? ac.cruiseUSGh : fp.manualCruiseUSGh;
+  const taxiUSG = ac.taxiUSG != null ? ac.taxiUSG : fp.manualTaxiUSG;
+  const finalReserveUSG = ac.finalReserveUSG != null ? ac.finalReserveUSG : fp.manualFinalReserveUSG;
+
+  if(state.legs.length===0){
+    return `<div class="empty-state">Calcule d'abord le log de nav pour obtenir le Trip Fuel.</div>`;
+  }
+  const tripMin = state.legs[state.legs.length-1].cumMin;
+  const tripUSG = state.legs.reduce((s,l)=>s+l.fuelUSG, 0);
+  const contUSG = tripUSG * (fp.contingencyPct/100);
+  const minReq = taxiUSG + tripUSG + contUSG + fp.altnUSG + finalReserveUSG + fp.additionalUSG + fp.extraUSG;
+  state._lastFuelTotalUSG = minReq; // used to prefill M&B
+
+  const cruiseInput = ac.cruiseUSGh != null
+    ? `${ac.cruiseUSGh} USG/h (${ac.cruisePct})${ac.climbUSGh!=null?', montée '+ac.climbUSGh+' USG/h':''}${ac.descentUSGh!=null?', descente '+ac.descentUSGh+' USG/h':''}`
+    : `<input data-fp="manualCruiseUSGh" type="number" step="0.1" value="${fp.manualCruiseUSGh}" style="width:60px;"> USG/h <span class="manual-tag">à saisir</span>`;
+  const taxiInput = ac.taxiUSG != null ? ac.taxiUSG.toFixed(1)
+    : `<input data-fp="manualTaxiUSG" type="number" step="0.1" value="${fp.manualTaxiUSG}" style="width:50px;">`;
+  const reserveInput = ac.finalReserveUSG != null ? ac.finalReserveUSG.toFixed(1)
+    : `<input data-fp="manualFinalReserveUSG" type="number" step="0.1" value="${fp.manualFinalReserveUSG}" style="width:50px;"> <span class="manual-tag">à saisir</span>`;
+
+  return `
+  <table>
+    <thead><tr><th></th><th>Poste</th><th>Min</th><th>USG</th></tr></thead>
+    <tbody>
+      <tr><td>A</td><td>Taxi fuel</td><td>—</td><td>${taxiInput}</td></tr>
+      <tr><td>B</td><td>Trip fuel (conso ${cruiseInput})</td><td>${fmtMin(tripMin)}</td><td>${tripUSG.toFixed(1)}</td></tr>
+      <tr><td>C</td><td>Contingency (${fp.contingencyPct}% trip)</td><td>—</td><td>${contUSG.toFixed(1)}</td></tr>
+      <tr><td>D</td><td>Alternate fuel <input data-fp="altnMin" type="number" value="${fp.altnMin}" style="width:40px;">min /
+        <input data-fp="altnUSG" type="number" step="0.1" value="${fp.altnUSG}" style="width:44px;">USG
+        <button class="small-btn" id="btn-calc-altn" title="Calcule à partir du point de dégagement placé sur la carte" style="border:1px solid var(--border);padding:2px 6px;">🧮 Calculer</button></td>
+        <td>${fp.altnMin}</td><td>${fp.altnUSG.toFixed(1)}</td></tr>
+      <tr><td>E</td><td>Final reserve</td><td>${ac.finalReserveMin}</td><td>${reserveInput}</td></tr>
+      <tr><td>F</td><td>Additional fuel <input data-fp="additionalUSG" type="number" step="0.1" value="${fp.additionalUSG}" style="width:46px;">USG</td>
+        <td>—</td><td>${fp.additionalUSG.toFixed(1)}</td></tr>
+      <tr><td>G</td><td>Extra fuel <input data-fp="extraUSG" type="number" step="0.1" value="${fp.extraUSG}" style="width:46px;">USG</td>
+        <td>—</td><td>${fp.extraUSG.toFixed(1)}</td></tr>
+      <tr class="total-row"><td>H</td><td>Minimum required fuel</td><td>—</td><td>${minReq.toFixed(1)} USG</td></tr>
+    </tbody>
+  </table>
+  <div class="status-line">Carburant : ${ac.fuelType}. Ajuste D/F/G selon ton dégagement réel. Ce total (H) peut être repris comme carburant embarqué dans le Mass &amp; Balance ci-dessous.</div>
+  <button class="btn" id="btn-fuel-to-mnb" style="margin-top:8px;">↓ Reprendre ${minReq.toFixed(1)} USG dans le Mass &amp; Balance</button>
+  `;
+}
+function wireFuelInputs(){
+  document.querySelectorAll('[data-fp]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      state.fuelParams[e.target.dataset.fp] = parseFloat(e.target.value)||0;
+      renderContent();
+    });
+  });
+  const btnCalcAltn = document.getElementById('btn-calc-altn');
+  if(btnCalcAltn) btnCalcAltn.onclick = computeAlternateFuel;
+  const btn = document.getElementById('btn-fuel-to-mnb');
+  if(btn) btn.onclick = ()=>{
+    const ac = AIRCRAFT_DB[state.aircraft];
+    const total = state._lastFuelTotalUSG || 0;
+    // put it all in the first fuel station (MAIN), capped at its usable capacity
+    const main = ac.fuelStations[0];
+    state.mnb.fuel[main.key] = Math.min(total, main.usableUSG);
+    renderContent();
+    showToast('Carburant reporté dans le Mass & Balance ✓');
+  };
+}
+
+/* ---------- Mass & Balance ---------- */
+function pointInPolygon(pt, poly){
+  let inside = false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+    const intersect = ((yi>pt[1]) !== (yj>pt[1])) && (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
+}
+function computeMnB(){
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const reg = ac.registrations.find(r=>r.tail===state.regTail) || ac.registrations[0];
+  const emptyMass = reg.mass, emptyMoment = reg.moment;
+
+  let zfMass = emptyMass, zfMoment = emptyMoment;
+  const stationRows = ac.stations.map(s=>{
+    const mass = state.mnb.stations[s.key] || 0;
+    zfMass += mass; zfMoment += mass*s.arm;
+    return { ...s, mass };
+  });
+
+  let toMass = zfMass, toMoment = zfMoment, fuelMassTotal = 0;
+  const fuelRows = ac.fuelStations.map(f=>{
+    const usg = state.mnb.fuel[f.key] || 0;
+    const kg = usg * ac.kgPerUSG;
+    fuelMassTotal += kg;
+    toMass += kg; toMoment += kg*f.arm;
+    return { ...f, usg, kg };
+  });
+  const toArm = toMass>0 ? toMoment/toMass : 0;
+
+  // landing = takeoff minus trip fuel burn (from computed nav log if available), burned from MAIN tank arm
+  const tripMin = state.legs.length ? state.legs[state.legs.length-1].cumMin : 0;
+  const cruiseUSGh = ac.cruiseUSGh != null ? ac.cruiseUSGh : state.fuelParams.manualCruiseUSGh;
+  const burnUSG = (tripMin/60) * (cruiseUSGh||0);
+  const burnKg = burnUSG * ac.kgPerUSG;
+  const mainArm = ac.fuelStations[0].arm;
+  const ldgMass = Math.max(toMass - burnKg, zfMass);
+  const ldgMoment = toMoment - burnKg*mainArm;
+  const ldgArm = ldgMass>0 ? ldgMoment/ldgMass : 0;
+
+  return { ac, reg, emptyMass, emptyMoment, stationRows, fuelRows, fuelMassTotal,
+    zfMass, zfMoment, toMass, toMoment, toArm, burnKg, ldgMass, ldgArm };
+}
+
+function limitBar(val, max){
+  if(max == null) return '';
+  const pct = Math.min(100, (val/max)*100);
+  return `<div class="limit-bar"><div class="limit-fill ${val>max?'over':''}" style="width:${pct}%;"></div></div>`;
+}
+
+function envelopeSVG(ac, points){
+  const allX = ac.envelope.map(p=>p[0]).concat(points.map(p=>p.cg));
+  const allY = ac.envelope.map(p=>p[1]).concat(points.map(p=>p.mass));
+  const xmin = Math.min(...allX)-0.03, xmax = Math.max(...allX)+0.03;
+  const ymin = Math.min(...allY)-60, ymax = Math.max(...allY)+60;
+  const W=300,H=220,padL=46,padB=26,padT=10,padR=10;
+  const sx = x => padL + (x-xmin)/(xmax-xmin) * (W-padL-padR);
+  const sy = y => (H-padB) - (y-ymin)/(ymax-ymin) * (H-padB-padT);
+  const poly = ac.envelope.map(p=>`${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ');
+  let gridY = '';
+  const ySteps = 4;
+  for(let i=0;i<=ySteps;i++){
+    const yv = ymin + (ymax-ymin)*i/ySteps;
+    gridY += `<line x1="${padL}" y1="${sy(yv).toFixed(1)}" x2="${W-padR}" y2="${sy(yv).toFixed(1)}" stroke="#232834" stroke-width="1"/>
+      <text x="${padL-6}" y="${(sy(yv)+3).toFixed(1)}" font-size="8.5" fill="#6b7385" text-anchor="end">${Math.round(yv)}</text>`;
+  }
+  const xSteps = 4;
+  let gridX = '';
+  for(let i=0;i<=xSteps;i++){
+    const xv = xmin + (xmax-xmin)*i/xSteps;
+    gridX += `<text x="${sx(xv).toFixed(1)}" y="${H-padB+14}" font-size="8.5" fill="#6b7385" text-anchor="middle">${xv.toFixed(2)}</text>`;
+  }
+  const pointsSVG = points.map((p,pi)=>{
+    // takeoff (first point) drawn larger as a ring so it stays visible even when landing sits exactly on top of it
+    const r = pi===0 ? 7 : 4;
+    const strokeW = pi===0 ? 2.5 : 1.5;
+    return `<line x1="${padL}" y1="${sy(p.mass).toFixed(1)}" x2="${sx(p.cg).toFixed(1)}" y2="${sy(p.mass).toFixed(1)}" stroke="${p.color}" stroke-width="1" stroke-dasharray="2,2"/>
+      <line x1="${sx(p.cg).toFixed(1)}" y1="${sy(p.mass).toFixed(1)}" x2="${sx(p.cg).toFixed(1)}" y2="${H-padB}" stroke="${p.color}" stroke-width="1" stroke-dasharray="2,2"/>
+      <circle cx="${sx(p.cg).toFixed(1)}" cy="${sy(p.mass).toFixed(1)}" r="${r}" fill="${pi===0?'none':p.color}" stroke="${p.color}" stroke-width="${strokeW}"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:var(--bg-0);border-radius:8px;">
+    ${gridY}${gridX}
+    <polygon points="${poly}" fill="rgba(79,209,165,0.10)" stroke="#4fd1a5" stroke-width="1.5"/>
+    ${pointsSVG}
+    <text x="${W/2}" y="${H-4}" font-size="9" fill="#6b7385" text-anchor="middle">Bras de levier (m)</text>
+  </svg>`;
+}
+
+function renderMnBSection(){
+  const ac = AIRCRAFT_DB[state.aircraft];
+  const r = computeMnB();
+
+  const stationInputs = r.stationRows.map(s=>`
+    <div class="field">
+      <label>${escapeHtml(s.label)} (kg)${s.max?` · max ${s.max}`:''}</label>
+      <input data-mnb-station="${s.key}" type="number" value="${s.mass}">
+      ${s.max ? limitBar(s.mass, s.max) : ''}
+    </div>`).join('');
+
+  const fuelInputs = r.fuelRows.map(f=>`
+    <div class="field">
+      <label>${escapeHtml(f.label)} (USG) · max ${f.usableUSG}</label>
+      <input data-mnb-fuel="${f.key}" type="number" step="0.5" value="${f.usg}">
+      <span class="status-line" style="margin:2px 0 0 0;">${f.kg.toFixed(1)} kg</span>
+      ${limitBar(f.usg, f.usableUSG)}
+    </div>`).join('');
+
+  const zfOver = ac.maxZFM!=null && r.zfMass > ac.maxZFM;
+  const toOver = r.toMass > ac.maxTOM;
+  const ldOver = r.ldgMass > ac.maxLDG;
+  const toInside = pointInPolygon([r.toArm, r.toMass], ac.envelope);
+  const ldInside = pointInPolygon([r.ldgArm, r.ldgMass], ac.envelope);
+
+  return `
+  <div class="mnb-grid">
+    <div>
+      <div class="status-line" style="margin-bottom:10px;">Masse à vide ${escapeHtml(r.reg.tail)} : <b style="color:var(--text-0);">${r.emptyMass} kg</b> (bras ${(r.emptyMoment/r.emptyMass).toFixed(3)} m)</div>
+      <div class="field-row">${stationInputs}</div>
+      <div class="field-row" style="margin-top:12px;">${fuelInputs}</div>
+
+      <table style="margin-top:16px;">
+        <thead><tr><th></th><th>Masse (kg)</th><th>Bras (m)</th><th>Moment (m.kg)</th><th>Limite</th></tr></thead>
+        <tbody>
+          ${ac.maxZFM!=null ? `<tr><td>ZFM</td><td>${r.zfMass.toFixed(1)}</td><td>${(r.zfMoment/r.zfMass).toFixed(3)}</td><td>${r.zfMoment.toFixed(1)}</td>
+            <td class="${zfOver?'bad-tag':'ok-tag'}">${zfOver?'✗ '+ac.maxZFM+' kg':'✓ max '+ac.maxZFM+' kg'}</td></tr>` : ''}
+          <tr><td>TOM</td><td>${r.toMass.toFixed(1)}</td><td>${r.toArm.toFixed(3)}</td><td>${r.toMoment.toFixed(1)}</td>
+            <td class="${toOver?'bad-tag':'ok-tag'}">${toOver?'✗ '+ac.maxTOM+' kg':'✓ max '+ac.maxTOM+' kg'}</td></tr>
+          <tr><td>LDM (estimée)</td><td>${r.ldgMass.toFixed(1)}</td><td>${r.ldgArm.toFixed(3)}</td><td>—</td>
+            <td class="${ldOver?'bad-tag':'ok-tag'}">${ldOver?'✗ '+ac.maxLDG+' kg':'✓ max '+ac.maxLDG+' kg'}</td></tr>
+        </tbody>
+      </table>
+      <div class="status-line">LDM estimée = TOM − carburant consommé sur le trip (${r.burnKg.toFixed(1)} kg, à partir du log de nav). Centrage T/O : <span class="${toInside?'ok-tag':'bad-tag'}">${toInside?'✓ dans l’enveloppe':'✗ hors enveloppe'}</span> · Centrage LDG : <span class="${ldInside?'ok-tag':'bad-tag'}">${ldInside?'✓ dans l’enveloppe':'✗ hors enveloppe'}</span></div>
+    </div>
+    <div>
+      ${envelopeSVG(ac, [
+        {cg:r.toArm, mass:r.toMass, color:'#5b8cff'},
+        {cg:r.ldgArm, mass:r.ldgMass, color:'#e0a856'}
+      ])}
+      <div class="status-line"><span style="color:#5b8cff;">◯</span> Décollage &nbsp; <span style="color:#e0a856;">●</span> Atterrissage (estimé) &nbsp;— si le carburant consommé est nul (log de nav pas encore calculé), les deux points sont identiques et le point d'atterrissage s'affiche au centre de l'anneau de décollage.</div>
+    </div>
+  </div>`;
+}
+function wireMnbInputs(){
+  document.querySelectorAll('[data-mnb-station]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      state.mnb.stations[e.target.dataset.mnbStation] = parseFloat(e.target.value)||0;
+      renderContent();
+    });
+  });
+  document.querySelectorAll('[data-mnb-fuel]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      state.mnb.fuel[e.target.dataset.mnbFuel] = parseFloat(e.target.value)||0;
+      renderContent();
+    });
+  });
+}
+
+/* ---------- eAIP France (SIA) : source officielle des distances déclarées ---------- */
+function airacCycleUrl(icao){
+  const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const anchor = Date.UTC(2026,7,6); // 06 AUG 2026 = début de cycle AIRAC connu (2609)
+  const msPerCycle = 28*24*3600*1000;
+  const now = Date.now();
+  const cycles = Math.floor((now-anchor)/msPerCycle);
+  const start = new Date(anchor + cycles*msPerCycle);
+  const dd=String(start.getUTCDate()).padStart(2,'0');
+  const mon=MONS[start.getUTCMonth()];
+  const yyyy=start.getUTCFullYear();
+  const mm=String(start.getUTCMonth()+1).padStart(2,'0');
+  return `https://www.sia.aviation-civile.gouv.fr/media/dvd/eAIP_${dd}_${mon}_${yyyy}/FRANCE/AIRAC-${yyyy}-${mm}-${dd}/html/eAIP/FR-AD-2.${icao.toUpperCase()}-fr-FR.html`;
+}
+async function perfFetchEAIP(icao){
+  const key = icao.toUpperCase();
+  if(state.perf.eaipCache[key] !== undefined) return state.perf.eaipCache[key];
+  const url = airacCycleUrl(key);
+  try{
+    const res = await fetch(url);
+    if(!res.ok){ const r={ok:false,url,reason:'http_'+res.status}; state.perf.eaipCache[key]=r; return r; }
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const tables = Array.from(doc.querySelectorAll('table'));
+    let target=null, headerRow=null;
+    outer: for(const t of tables){
+      for(const r of Array.from(t.querySelectorAll('tr'))){
+        const cells = Array.from(r.querySelectorAll('th,td')).map(c=>c.textContent.trim().toUpperCase());
+        if(cells.includes('TORA') && cells.includes('LDA')){ target=t; headerRow=cells; break outer; }
+      }
+    }
+    if(!target){ const r={ok:false,url,reason:'table_not_found'}; state.perf.eaipCache[key]=r; return r; }
+    const idx = { rwy: headerRow.findIndex(c=>c.includes('RWY')), tora: headerRow.indexOf('TORA'),
+      toda: headerRow.indexOf('TODA'), asda: headerRow.indexOf('ASDA'), lda: headerRow.indexOf('LDA') };
+    const num=(s)=>{ const v=parseFloat((s||'').replace(/[^\d.]/g,'')); return isNaN(v)?null:v; };
+    const runways=[];
+    for(const r of Array.from(target.querySelectorAll('tr'))){
+      const cells = Array.from(r.querySelectorAll('th,td')).map(c=>c.textContent.trim());
+      if(cells.length<4) continue;
+      const rwyId = cells[idx.rwy];
+      if(!rwyId || !/^\d{2}[LCR]?$/.test(rwyId)) continue;
+      runways.push({ designator:rwyId, tora:num(cells[idx.tora]), toda:num(cells[idx.toda]), asda:num(cells[idx.asda]), lda:num(cells[idx.lda]) });
+    }
+    const r = runways.length ? {ok:true,url,runways} : {ok:false,url,reason:'no_rows'};
+    state.perf.eaipCache[key]=r; return r;
+  }catch(e){
+    const r={ok:false,url,reason:'fetch_error'}; state.perf.eaipCache[key]=r; return r;
+  }
+}
+/* ---------- OpenAIP : géométrie piste (QFU, altitude) + repli distances si eAIP indisponible ---------- */
+async function perfFetchAirport(icao){
+  if(!icao) return null;
+  const key = icao.toUpperCase();
+  if(state.perf.oaCache[key] !== undefined) return state.perf.oaCache[key];
+  if(!state.openaipApiKey){ state.perf.oaCache[key] = null; return null; }
+  try{
+    const url = `https://api.core.openaip.net/api/airports?search=${encodeURIComponent(key)}&apiKey=${encodeURIComponent(state.openaipApiKey)}`;
+    const res = await fetch(url);
+    if(!res.ok){ state.perf.oaCache[key] = null; return null; }
+    const data = await res.json();
+    const items = data.items || data || [];
+    const airport = items.find(a => (a.icaoCode||'').toUpperCase() === key) || items[0] || null;
+    state.perf.oaCache[key] = airport;
+    return airport;
+  }catch(e){ state.perf.oaCache[key] = null; return null; }
+}
+async function perfOpenPicker(slot){
+  const icao = slot==='dep' ? state.depIcao : slot==='dest' ? state.destIcao : state.altnIcao;
+  if(!icao){ showToast('Renseigne d\'abord le code OACI correspondant en haut de la fiche vol.'); return; }
+  state.perf.oaLoading = true; state.perf.oaPicker = null; renderContent();
+  const [airport, eaip] = await Promise.all([
+    state.openaipApiKey ? perfFetchAirport(icao) : Promise.resolve(null),
+    perfFetchEAIP(icao)
+  ]);
+  state.perf.oaLoading = false;
+  // Construit la liste des pistes à afficher : priorité aux désignateurs eAIP (officiel),
+  // complétée par OpenAIP pour l'altitude terrain (donnée géométrique fiable).
+  const elevM = airport && airport.elevation ? airport.elevation.value : null;
+  let designators = [];
+  if(eaip.ok) designators = eaip.runways.map(r=>r.designator);
+  else if(airport) designators = (airport.runways||[]).filter(r=>r.operations===0).map(r=>r.designator);
+  if(designators.length===0){
+    showToast(`Aucune donnée trouvée pour ${icao.toUpperCase()} (ni eAIP officiel, ni OpenAIP).`);
+    renderContent(); return;
+  }
+  state.perf.oaPicker = { slot, icao: icao.toUpperCase(), name: airport?airport.name:null,
+    elevM, designators, eaip, openaipRunways: airport ? (airport.runways||[]) : [] };
+  renderContent();
+}
+function perfApplyRunway(designator){
+  const p = state.perf.oaPicker;
+  if(!p) return;
+  const qfu = parseInt(designator, 10) * 10;
+  state.perf.qfu = qfu;
+  if(p.elevM != null) state.perf.elev = Math.round(p.elevM * 3.28084);
+
+  const eaipRwy = p.eaip.ok ? p.eaip.runways.find(r=>r.designator===designator) : null;
+  if(eaipRwy){
+    // Source officielle disponible : on applique directement TORA/LDA.
+    if(eaipRwy.tora!=null) state.perf.tora = Math.round(eaipRwy.tora);
+    if(eaipRwy.lda!=null) state.perf.lda = Math.round(eaipRwy.lda);
+    state.perf.oaApplied = { source:'eaip', icao:p.icao, designator, url:p.eaip.url,
+      tora:eaipRwy.tora, toda:eaipRwy.toda, asda:eaipRwy.asda, lda:eaipRwy.lda };
+    showToast(`Piste ${designator} de ${p.icao} : QFU, altitude, TORA et LDA appliqués (eAIP officiel) ✓`);
+  }else{
+    // eAIP indisponible pour ce terrain (CORS, cycle introuvable...) : repli OpenAIP, pas d'auto-apply des distances.
+    const rwy = p.openaipRunways.find(r=>r.designator===designator);
+    const lenM = rwy && rwy.dimension && rwy.dimension.length ? rwy.dimension.length.value : null;
+    const dd = rwy ? (rwy.declaredDistance||{}) : {};
+    const tora = dd.tora ? dd.tora.value : lenM;
+    const toda = dd.toda ? dd.toda.value : lenM;
+    const asda = dd.asda ? dd.asda.value : lenM;
+    const lda  = dd.lda  ? dd.lda.value  : lenM;
+    state.perf.oaApplied = { source:'openaip', icao:p.icao, designator, eaipUrl:p.eaip.url, eaipReason:p.eaip.reason,
+      tora, toda, asda, lda, fallback: !dd.tora || !dd.toda || !dd.asda || !dd.lda };
+    showToast(`Piste ${designator} de ${p.icao} : QFU et altitude appliqués — eAIP officiel indisponible, vérifie TORA/LDA avant de les reporter.`);
+  }
+  state.perf.oaPicker = null;
+  renderContent();
+}
+function perfUseDistance(field){
+  const a = state.perf.oaApplied;
+  if(!a) return;
+  const val = a[field];
+  if(val==null) return;
+  if(field==='tora') state.perf.tora = Math.round(val);
+  if(field==='lda') state.perf.lda = Math.round(val);
+  renderContent();
+}
+function renderPerfOpenAip(){
+  const p = state.perf;
+  const btn = (slot, label, icao) => `<button class="btn" data-oa-slot="${slot}" ${!icao?'disabled':''} type="button">↓ ${label}${icao?' ('+escapeHtml(icao)+')':''}</button>`;
+  let extra = '';
+  if(p.oaLoading){
+    extra = `<div class="status-line" style="margin-top:8px;">⏳ Récupération eAIP officiel + OpenAIP…</div>`;
+  }else if(p.oaPicker){
+    const pk = p.oaPicker;
+    const rows = pk.designators.map(d=>{
+      const er = pk.eaip.ok ? pk.eaip.runways.find(r=>r.designator===d) : null;
+      const or_ = pk.openaipRunways.find(r=>r.designator===d);
+      const dd = or_ ? (or_.declaredDistance||{}) : {};
+      const len = or_ && or_.dimension && or_.dimension.length ? or_.dimension.length.value : null;
+      const v=(x)=> x!=null ? Math.round(x)+'m' : '—';
+      const src = er ? '<span style="color:var(--accent);font-weight:700;">officiel SIA</span>' : '<span style="color:var(--warn);">OpenAIP, non certifié</span>';
+      const t = er ? v(er.tora) : v(dd.tora?dd.tora.value:len);
+      const to = er ? v(er.toda) : v(dd.toda?dd.toda.value:len);
+      const a_ = er ? v(er.asda) : v(dd.asda?dd.asda.value:len);
+      const l = er ? v(er.lda) : v(dd.lda?dd.lda.value:len);
+      return `<button class="btn" data-oa-pick="${d}" type="button" style="text-align:left;">
+        <b>${d}</b>&nbsp; TORA ${t} · TODA ${to} · ASDA ${a_} · LDA ${l} &nbsp;— ${src}
+      </button>`;
+    }).join('');
+    extra = `<div class="status-line" style="margin-top:8px;">Choisis le sens de piste pour ${escapeHtml(pk.icao)}${pk.name?' — '+escapeHtml(pk.name):''} :</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${rows}</div>
+      ${!pk.eaip.ok?`<div class="status-line" style="margin-top:6px;color:var(--warn);">eAIP officiel indisponible pour ce terrain (${escapeHtml(pk.eaip.reason||'?')}) — probablement bloqué par le navigateur (CORS) sur le site du SIA. <a href="${pk.eaip.url}" target="_blank" rel="noopener" style="color:var(--accent-blue);">Ouvrir la page eAIP officielle →</a></div>`:''}`;
+  }
+  const applied = p.oaApplied ? (p.oaApplied.source==='eaip' ? `<div class="perf-rwybox" style="border-color:var(--accent);margin-top:8px;">
+      <div style="color:var(--accent);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">
+        ✓ Source officielle — eAIP France (SIA), cycle AIRAC en vigueur
+      </div>
+      <div class="status-line" style="margin:0;">${escapeHtml(p.oaApplied.icao)} piste ${escapeHtml(p.oaApplied.designator)} — QFU, altitude, TORA et LDA appliqués :
+        TORA ${p.oaApplied.tora!=null?Math.round(p.oaApplied.tora):'—'} m ·
+        TODA ${p.oaApplied.toda!=null?Math.round(p.oaApplied.toda):'—'} m ·
+        ASDA ${p.oaApplied.asda!=null?Math.round(p.oaApplied.asda):'—'} m ·
+        LDA ${p.oaApplied.lda!=null?Math.round(p.oaApplied.lda):'—'} m
+      </div>
+      <div class="status-line" style="margin-top:4px;"><a href="${p.oaApplied.url}" target="_blank" rel="noopener" style="color:var(--accent-blue);">Vérifier sur la page eAIP officielle →</a></div>
+    </div>` : `<div class="perf-rwybox" style="border-color:var(--danger);margin-top:8px;">
+      <div style="color:var(--danger);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">
+        ⚠️ Non certifié — eAIP officiel indisponible (${escapeHtml(p.oaApplied.eaipReason||'?')}), repli sur OpenAIP (base communautaire, déjà prise en défaut). Vérifie sur la VAC/eAIP avant d'utiliser.
+      </div>
+      <div class="status-line" style="margin:0 0 6px;">${escapeHtml(p.oaApplied.icao)} piste ${escapeHtml(p.oaApplied.designator)} — QFU et altitude déjà appliqués ci-dessous. Pour TORA/LDA, vérifie puis reporte toi-même :</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span class="status-line" style="margin:0;">TORA ${p.oaApplied.tora!=null?Math.round(p.oaApplied.tora):'—'} m</span>
+        ${p.oaApplied.tora!=null?`<button class="btn" data-oa-use="tora" type="button" style="padding:3px 10px;font-size:11px;">→ utiliser pour TORA dispo</button>`:''}
+        <span class="status-line" style="margin:0;">TODA ${p.oaApplied.toda!=null?Math.round(p.oaApplied.toda):'—'} m</span>
+        <span class="status-line" style="margin:0;">ASDA ${p.oaApplied.asda!=null?Math.round(p.oaApplied.asda):'—'} m</span>
+        <span class="status-line" style="margin:0;">LDA ${p.oaApplied.lda!=null?Math.round(p.oaApplied.lda):'—'} m</span>
+        ${p.oaApplied.lda!=null?`<button class="btn" data-oa-use="lda" type="button" style="padding:3px 10px;font-size:11px;">→ utiliser pour LDA dispo</button>`:''}
+      </div>
+      ${p.oaApplied.fallback?'<div class="status-line" style="margin-top:6px;color:var(--warn);">Au moins une distance déclarée était absente d\'OpenAIP — longueur physique de piste utilisée en secours (encore moins fiable, ex. seuils décalés non pris en compte).</div>':''}
+      <div class="status-line" style="margin-top:6px;"><a href="${p.oaApplied.eaipUrl}" target="_blank" rel="noopener" style="color:var(--accent-blue);">Ouvrir la page eAIP officielle →</a></div>
+    </div>`) : '';
+  return `
+    <div class="field-row" style="margin-bottom:4px;">
+      ${btn('dep','Départ', state.depIcao)}
+      ${btn('dest','Destination', state.destIcao)}
+      ${btn('altn','Dégagement', state.altnIcao)}
+    </div>
+    ${extra}${applied}`;
+}
+function wirePerfOpenAip(){
+  document.querySelectorAll('[data-oa-slot]').forEach(b=>{
+    b.addEventListener('click', ()=> perfOpenPicker(b.dataset.oaSlot));
+  });
+  document.querySelectorAll('[data-oa-pick]').forEach(b=>{
+    b.addEventListener('click', ()=> perfApplyRunway(b.dataset.oaPick));
+  });
+  document.querySelectorAll('[data-oa-use]').forEach(b=>{
+    b.addEventListener('click', ()=> perfUseDistance(b.dataset.oaUse));
+  });
+}
+
+/* ---------- Performances (décollage / atterrissage) ---------- */
+function perfFmt(n){ return Math.round(n).toLocaleString('fr-FR'); }
+function perfVerdict(avail,req){
+  if(req>avail) return ['bad','INSUFFISANT'];
+  const m=(avail-req)/avail; if(m<0.15) return ['warn','MARGE FAIBLE']; return ['ok','OK'];
+}
+function perfNotesHTML(notes){
+  if(!notes.length) return '';
+  return '<div class="perf-notes">'+notes.map(([t,m])=>`<div class="${t==='e'?'ne':'nw'}">› ${escapeHtml(m)}</div>`).join('')+'</div>';
+}
+function perfRunwaySVG(avail,req,roll){
+  const W=560,H=80,pad=8;
+  const scale=Math.max(avail,req)*1.06 || 1;
+  const px=v=>pad+(v/scale)*(W-2*pad);
+  const ribY=24,ribH=26;
+  const reqX=px(req), rollX=px(roll), availX=px(avail);
+  const exceed=req>avail;
+  const reqCol=exceed?'var(--danger)':(avail-req)/avail<0.15?'var(--warn)':'var(--accent)';
+  let dashes=''; for(let x=pad+14;x<availX-6;x+=26){ dashes+=`<rect x="${x}" y="${ribY+ribH/2-1.1}" width="12" height="2.2" fill="#3a4155" rx="1"/>`; }
+  return `<svg class="perf-rwy" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    <rect x="${pad}" y="${ribY}" width="${availX-pad}" height="${ribH}" rx="3" fill="var(--bg-1)" stroke="var(--border)"/>
+    ${dashes}
+    <rect x="${pad}" y="${ribY}" width="${reqX-pad}" height="${ribH}" rx="3" fill="${reqCol}" opacity="0.16"/>
+    <rect x="${pad}" y="${ribY}" width="${rollX-pad}" height="${ribH}" fill="${reqCol}" opacity="0.32"/>
+    <line x1="${reqX}" y1="${ribY-5}" x2="${reqX}" y2="${ribY+ribH+5}" stroke="${reqCol}" stroke-width="2"/>
+    <text x="${reqX}" y="${ribY-8}" fill="${reqCol}" font-size="10.5" text-anchor="middle">${perfFmt(req)} m</text>
+    <line x1="${availX}" y1="${ribY-3}" x2="${availX}" y2="${ribY+ribH+3}" stroke="var(--text-2)" stroke-width="1.5"/>
+    <text x="${availX}" y="${ribY+ribH+17}" fill="var(--text-1)" font-size="9" text-anchor="end">dispo ${perfFmt(avail)} m</text>
+  </svg>`;
+}
+function perfReadInputs(){
+  const p = state.perf;
+  let qnh = p.qnh; if(p.qnhUnit==='inhg') qnh = qnh*33.8639;
+  const elev = p.elev;
+  const pa = elev + (1013.25-qnh)*27;
+  const oat = p.oat;
+  const isa = oat - PERF_DA40.isaTemp(pa);
+  const sig = PERF_DA40.sigma(pa,oat);
+  const slope = p.slope*(p.slopeDir==='up'?1:-1);
+  let ang=(p.wdir-p.qfu)*Math.PI/180;
+  const spd=p.wspd;
+  const head = spd*Math.cos(ang), cross = Math.abs(spd*Math.sin(ang));
+  return{pa,oat,isa,sig,qfu:p.qfu,tora:p.tora,lda:p.lda,slope,surf:p.surf,state:p.pstate,head,cross};
+}
+function renderPerfSection(){
+  const ac = AIRCRAFT_DB[state.aircraft];
+  if(state.aircraft!=='DA40'){
+    return `<div class="empty-state">Performances décollage/atterrissage disponibles uniquement pour le DA40 pour l'instant.</div>`;
+  }
+  const p = state.perf;
+  const eng114 = (ac.perf114Tails||[]).includes(state.regTail);
+  if(p.tab==='climb' && !eng114) p.tab='to';
+  const mnb = computeMnB();
+  if(p.massTO==null) p.massTO = Math.round(mnb.toMass);
+  if(p.massLDG==null) p.massLDG = Math.round(mnb.ldgMass);
+  const I = perfReadInputs();
+
+  const engBadge = eng114
+    ? `${escapeHtml(state.regTail)} · TAE 125-02-114 · <b style="color:var(--accent);">155 HP — tables exactes</b>`
+    : `${escapeHtml(state.regTail)} · TAE 125-01 · <b style="color:var(--warn);">135 HP — abaque estimé</b>`;
+
+  const propField = eng114 ? `
+    <div class="field"><label>Hélice</label>
+      <select id="perf-prop">
+        <option value="5a" ${p.prop==='5a'?'selected':''}>MTV-6-A/187-129 — table 5(a)</option>
+        <option value="5b" ${p.prop==='5b'?'selected':''}>MTV-6-A/190-69 — table 5(b)</option>
+      </select></div>` : '';
+
+  const atmoFields = `
+    <div class="field-row">
+      <div class="field"><label>Altitude terrain (ft)</label><input id="perf-elev" type="number" step="10" value="${p.elev}"></div>
+      <div class="field"><label>QNH</label>
+        <div style="display:flex;gap:4px;">
+          <input id="perf-qnh" type="number" step="${p.qnhUnit==='inhg'?'0.01':'1'}" value="${p.qnh}" style="flex:1;">
+          <select id="perf-qnhunit" style="max-width:76px;"><option value="hpa" ${p.qnhUnit==='hpa'?'selected':''}>hPa</option><option value="inhg" ${p.qnhUnit==='inhg'?'selected':''}>inHg</option></select>
+        </div></div>
+      <div class="field"><label>OAT (°C)</label><input id="perf-oat" type="number" step="1" value="${p.oat}"></div>
+      <div class="field"><label>QFU piste (° mag.)</label><input id="perf-qfu" type="number" min="0" max="360" step="1" value="${p.qfu}"></div>
+    </div>
+    <div class="field-row" style="margin-top:12px;">
+      <div class="field"><label>Vent — direction (° vrai)</label><input id="perf-wdir" type="number" min="0" max="360" step="1" value="${p.wdir}"></div>
+      <div class="field"><label>Vent — vitesse (kt)</label><input id="perf-wspd" type="number" min="0" step="1" value="${p.wspd}"></div>
+    </div>`;
+  const runwayFields = `
+    <div class="field-row" style="margin-top:12px;">
+      <div class="field"><label>TORA dispo (m)</label><input id="perf-tora" type="number" step="10" value="${p.tora}"></div>
+      <div class="field"><label>LDA dispo (m)</label><input id="perf-lda" type="number" step="10" value="${p.lda}"></div>
+      <div class="field"><label>Pente piste (%)</label>
+        <div style="display:flex;gap:4px;">
+          <input id="perf-slope" type="number" min="0" max="5" step="0.1" value="${p.slope}" style="flex:1;">
+          <select id="perf-slopedir" style="max-width:110px;"><option value="up" ${p.slopeDir==='up'?'selected':''}>Montante</option><option value="down" ${p.slopeDir==='down'?'selected':''}>Descend.</option></select>
+        </div></div>
+      <div class="field"><label>Surface</label>
+        <select id="perf-surf">
+          <option value="0" ${p.surf==='0'?'selected':''}>Revêtue</option>
+          <option value="g5" ${p.surf==='g5'?'selected':''}>Herbe ≤5cm</option>
+          <option value="g10" ${p.surf==='g10'?'selected':''}>Herbe 5–10cm</option>
+          <option value="g25" ${p.surf==='g25'?'selected':''}>Herbe &gt;10cm</option>
+        </select></div>
+    </div>
+    <div class="field-row" style="margin-top:12px;">
+      <div class="field"><label>État piste</label>
+        <select id="perf-pstate"><option value="dry" ${p.pstate==='dry'?'selected':''}>Sec</option><option value="wet" ${p.pstate==='wet'?'selected':''}>Mouillé</option></select></div>
+    </div>`;
+
+  const isaTxt=(I.isa>=0?'+':'')+I.isa.toFixed(0);
+  const atmoLine = `<div class="status-line">Alt-pression ${perfFmt(I.pa)} ft · écart ISA ${isaTxt}°C · σ ${I.sig.toFixed(3)} · vent ${I.head>=0?'face':'arrière'} ${Math.abs(I.head).toFixed(0)} kt, travers ${I.cross.toFixed(0)} kt</div>`;
+
+  let body;
+  if(p.tab==='to'){
+    const r = PERF_DA40.computeTO(eng114?'114':'01', p.prop, p.massTO, I);
+    const [vc,vt] = perfVerdict(r.avail, r.obst);
+    const marg = r.avail - r.obst;
+    body = `
+      <div class="field-row" style="margin-bottom:12px;">
+        <div class="field"><label>Masse au décollage (kg)</label><input id="perf-mass-to" type="number" step="5" value="${p.massTO}"></div>
+        <div class="field" style="justify-content:flex-end;"><label>&nbsp;</label><span class="status-line" style="margin:0;">pré-rempli depuis TOM (M&amp;B) : ${Math.round(mnb.toMass)} kg</span></div>
+      </div>
+      <div class="perf-speeds">
+        <div class="perf-spd"><div class="k">V<sub>R</sub></div><div class="v">${r.vr} kt</div></div>
+        <div class="perf-spd"><div class="k">V montée init.</div><div class="v">${r.vcl} kt</div></div>
+        <div class="perf-spd"><div class="k">Volets</div><div class="v">T/O</div></div>
+      </div>
+      <div class="perf-big">
+        <div class="perf-box"><div class="k">Roulage décollage</div><div class="v">${perfFmt(r.roll)} m</div><div class="x">${r.est?'ground roll · estimé (abaque)':'ground roll · table exacte'}</div></div>
+        <div class="perf-box accent"><div class="k">Distance / obstacle 15 m</div><div class="v">${perfFmt(r.obst)} m</div><div class="x">${r.est?'estimé (abaque) · facteur dimensionnant':'take-off distance · facteur dimensionnant'}</div></div>
+      </div>
+      <div class="perf-rwybox">
+        <div class="perf-rwyhead"><div class="t">Piste · QFU ${String(Math.round(p.qfu)).padStart(2,'0')}</div><div class="perf-verdict ${vc}">${vt} · ${marg>=0?'+':''}${perfFmt(marg)} m</div></div>
+        ${perfRunwaySVG(r.avail, r.obst, r.roll)}
+      </div>
+      ${perfNotesHTML(r.notes)}
+      <div class="perf-src">${eng114?'Source : table exacte du supplément AFM/POH (moteur -114).':'Source : abaque AFM de base — estimation calibrée sur 2 points de référence de l’abaque, voir méthode ci-dessous.'}</div>`;
+  }else if(p.tab==='ldg'){
+    const r = PERF_DA40.computeLDG(p.flaps, p.massLDG, I);
+    const [vc,vt] = perfVerdict(r.avail, r.tot);
+    const marg = r.avail - r.tot;
+    body = `
+      <div class="field-row" style="margin-bottom:12px;">
+        <div class="field"><label>Masse à l'atterrissage (kg)</label><input id="perf-mass-ldg" type="number" step="5" value="${p.massLDG}"></div>
+        <div class="field" style="justify-content:flex-end;"><label>&nbsp;</label><span class="status-line" style="margin:0;">pré-rempli depuis LDM estimée (M&amp;B) : ${Math.round(mnb.ldgMass)} kg</span></div>
+      </div>
+      <div class="perf-speeds">
+        <div class="perf-spd"><div class="k">V approche</div><div class="v">${r.vapp} kt</div></div>
+        <div class="perf-spd" style="flex:2;min-width:180px;"><div class="k">Configuration volets</div>
+          <div class="perf-tabs" style="margin:4px 0 0;">
+            <button class="btn ${p.flaps==='LDG'?'btn-primary':''}" id="perf-flaps-ldg" type="button">Volets LDG</button>
+            <button class="btn ${p.flaps==='UP'?'btn-primary':''}" id="perf-flaps-up" type="button">Volets UP</button>
+          </div></div>
+      </div>
+      <div class="perf-big">
+        <div class="perf-box"><div class="k">Roulage atterrissage</div><div class="v">${perfFmt(r.roll)} m</div><div class="x">ground roll · estimé</div></div>
+        <div class="perf-box accent"><div class="k">Distance / obstacle 15 m</div><div class="v">${perfFmt(r.tot)} m</div><div class="x">landing distance · estimé</div></div>
+      </div>
+      <div class="perf-rwybox">
+        <div class="perf-rwyhead"><div class="t">Piste · QFU ${String(Math.round(p.qfu)).padStart(2,'0')}</div><div class="perf-verdict ${vc}">${vt} · ${marg>=0?'+':''}${perfFmt(marg)} m</div></div>
+        ${perfRunwaySVG(r.avail, r.tot, r.roll)}
+      </div>
+      ${perfNotesHTML(r.notes)}
+      <div class="perf-src">Source : valeurs ISA/MSL imprimées dans l'AFM de base (§${p.flaps==='LDG'?'5.3.11':'5.3.12'}), identiques pour toute la flotte, corrigées ensuite pour masse/densité/vent/piste.</div>`;
+  }else{
+    // ---- Montée & Croisière (F-HOVE / F-GZMP uniquement — données tabulées 114 HP) ----
+    if(p.cruisePA==null){ p.cruisePA = Math.min(16000, Math.max(0, Math.round((state.cruiseAlt||3000)/2000)*2000)); }
+    const c = PERF_DA40.computeClimb(p.prop, I, I.head);
+    const cr = PERF_DA40.computeCruise(p.prop, p.loadPct, p.cruisePA);
+    const loadOptions = [50,60,70,80,90,100].map(v=>`<option value="${v}" ${p.loadPct===v?'selected':''}>${v}%</option>`).join('');
+    const paOptions = [0,2000,4000,6000,8000,10000,12000,14000,16000].map(v=>`<option value="${v}" ${p.cruisePA===v?'selected':''}>${v} ft</option>`).join('');
+    body = `
+      <div class="status-line" style="margin-bottom:10px;">Calculée à partir des tables 5(a)-7/5(b)-7 (montée initiale, flaps T/O, MAX, 1150 kg) et 5(a)-11/5(b)-11 (croisière, réservoirs standard) du supplément AFM/POH — hélice ${p.prop==='5b'?'MTV-6-A/190-69':'MTV-6-A/187-129'}.</div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-title">Climb Performances</div>
+        <div class="perf-speeds">
+          <div class="perf-spd"><div class="k">Vz (montée initiale)</div><div class="v">${Math.round(c.vz)} ft/mn</div></div>
+          <div class="perf-spd"><div class="k">IAS montée</div><div class="v">${c.iasKt} kt</div></div>
+          <div class="perf-spd"><div class="k">TAS montée</div><div class="v">${c.tas.toFixed(0)} kt</div></div>
+          <div class="perf-spd"><div class="k">GS montée</div><div class="v">${c.gsKt.toFixed(0)} kt</div></div>
+        </div>
+        <div class="status-line" style="margin-top:2px;">γ (%) = Vz / GS = ${Math.round(c.vz)} / ${(c.gsKt*101.269).toFixed(0)} = <b style="color:var(--text-0);">${c.gamma.toFixed(2)} %</b></div>
+        <div class="status-line" style="margin-top:6px;">Vz tabulée uniquement à MTOW 1150 kg (l'AFM ne donne pas la montée initiale à masse réduite) — à masse inférieure, Vz réelle est meilleure que ce qui est affiché ici.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cruise Performances</div>
+        <div class="field-row" style="margin-bottom:10px;">
+          <div class="field"><label>Altitude croisière</label><select id="perf-cruisepa">${paOptions}</select></div>
+          <div class="field"><label>% Puissance</label><select id="perf-loadpct">${loadOptions}</select></div>
+        </div>
+        <div class="perf-speeds">
+          <div class="perf-spd"><div class="k">TAS</div><div class="v">${cr?cr.ktas.toFixed(0):'—'} kt</div></div>
+          <div class="perf-spd"><div class="k">Consommation</div><div class="v">${cr?cr.usgh.toFixed(1):'—'} USG/h</div></div>
+          <div class="perf-spd"><div class="k">Consommation</div><div class="v">${cr?cr.lh.toFixed(1):'—'} l/h</div></div>
+        </div>
+        ${p.loadPct>75?`<div class="status-line" style="margin-top:6px;color:var(--warn);">AFM : puissance croisière &gt;75 % déconseillée. Pour une croisière économique, régler ≤70 %.</div>`:''}
+        ${cr&&cr.outOfRange?`<div class="status-line" style="margin-top:6px;color:var(--warn);">Cette puissance n'est pas tabulée à cette altitude — valeur affichée plafonnée à ${cr.maxPA} ft (altitude max tabulée pour ${p.loadPct}%).</div>`:''}
+      </div>
+      <div class="perf-src">Source : tables exactes du supplément AFM/POH (moteur -114) — F-HOVE / F-GZMP uniquement.</div>`;
+  }
+
+  return `
+    <div class="status-line" style="margin-bottom:10px;">${engBadge}</div>
+    <div class="perf-tabs">
+      <button class="btn ${p.tab==='to'?'btn-primary':''}" id="perf-tab-to" type="button">🛫 Décollage</button>
+      <button class="btn ${p.tab==='ldg'?'btn-primary':''}" id="perf-tab-ldg" type="button">🛬 Atterrissage</button>
+      ${eng114?`<button class="btn ${p.tab==='climb'?'btn-primary':''}" id="perf-tab-climb" type="button">📈 Montée &amp; Croisière</button>`:''}
+    </div>
+    <div class="field-row">${propField}</div>
+    ${p.tab!=='climb'?`<div class="status-line" style="margin-bottom:4px;">Récupérer piste (TORA/TODA/ASDA/LDA) — eAIP officiel (SIA), repli OpenAIP si indisponible :</div>
+    ${renderPerfOpenAip()}`:''}
+    ${atmoFields}
+    ${p.tab!=='climb'?runwayFields:''}
+    ${p.tab!=='climb'?atmoLine:''}
+    <div style="margin-top:14px;">${body}</div>
+    <details class="perf-method">
+      <summary>Méthode &amp; limites de calcul</summary>
+      <div class="body">
+        <b>F-HOVE / F-GZMP (155 HP)</b> : décollage, montée initiale et croisière lus directement dans les
+        tables 5(a)/5(b) du supplément AFM/POH (interpolation masse/PA/écart ISA, ou PA/%puissance pour la
+        croisière) — valeurs exactes, pas d'estimation.<br><br>
+        <b>Reste de la flotte (135 HP)</b> : l'AFM de base ne donne le décollage que sous forme d'abaque
+        (nomogramme), pas de table ; la montée/croisière ne sont pas disponibles pour ces avions dans l'outil.
+        La forme de variation du décollage (masse/altitude/température) est reprise de la table -114 ci-dessus,
+        mise à l'échelle par deux facteurs calibrés sur les exemples chiffrés imprimés dans l'abaque lui-même
+        (K roulage = 1,109 ; K distance/obstacle = 1,250). C'est une estimation — recoupe avec l'abaque papier
+        de l'AFM avant tout vol réel.<br><br>
+        <b>Atterrissage</b> : base ISA/MSL imprimée en toutes lettres dans l'AFM (identique pour toute la
+        flotte), corrigée pour masse (proportionnelle), densité (1/σ), vent (loi GS²) et piste (herbe par
+        longueur, pente, état) selon les notes de l'AFM : herbe ≤5cm +5 % roulage ; 5–10cm +15 % ; &gt;10cm
+        +25 % ; pente 2 % ≈ +10 % distance (descendante à l'atterrissage) ; piste mouillée : majoration
+        prudentielle hors AFM (+15 % roulage).<br><br>
+        <b>Décollage — majorations réglementaires (OPS 1.530)</b> : herbe sèche TOD ×1,2 ; herbe mouillée
+        TOD ×1,3 ; piste dure (sèche ou mouillée) ×1,0 (pas de majoration réglementaire sur piste dure
+        mouillée) ; piste ascendante : TOD +5 % par 1 % de pente. Ces facteurs remplacent, pour le décollage
+        uniquement, les anciennes majorations empiriques par longueur d'herbe — l'atterrissage garde les
+        siennes (AFM, ci-dessus). Vent : modèle linéaire (décollage) / GS² (atterrissage), calibré sur
+        l'abaque, non issu d'une table AFM dédiée.<br><br>
+        <b>Montée initiale</b> : Vz lue dans les tables 5(a)-7/5(b)-7 (flaps T/O, puissance MAX, 1150 kg
+        uniquement — l'AFM ne tabule pas d'autre masse). TAS obtenue par conversion densité de l'IAS de
+        montée (66 kt) ; GS = TAS − composante de vent debout dans l'axe QFU ; γ(%) = Vz / GS (converti en
+        ft/mn).<br><br>
+        <b>Croisière</b> : TAS et débit carburant lus dans les tables 5(a)-11/5(b)-11 (réservoirs standard),
+        par palier d'altitude et de %puissance. Le débit carburant est indépendant de l'altitude dans ces
+        tables (fonction du %puissance seul) ; l'AFM déconseille une puissance croisière &gt;75 %.
+      </div>
+    </details>`;
+}
+function wirePerfInputs(){
+  const bind = (id, cb) => { const el=document.getElementById(id); if(el) el.addEventListener('change', cb); };
+  bind('perf-prop', e=>{ state.perf.prop=e.target.value; renderContent(); });
+  bind('perf-elev', e=>{ state.perf.elev=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-qnh', e=>{ state.perf.qnh=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-qnhunit', e=>{
+    const was=state.perf.qnhUnit, nu=e.target.value;
+    if(was!=='inhg'&&nu==='inhg') state.perf.qnh = +(state.perf.qnh/33.8639).toFixed(2);
+    if(was==='inhg'&&nu==='hpa') state.perf.qnh = Math.round(state.perf.qnh*33.8639);
+    state.perf.qnhUnit=nu; renderContent();
+  });
+  bind('perf-oat', e=>{ state.perf.oat=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-qfu', e=>{ state.perf.qfu=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-tora', e=>{ state.perf.tora=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-lda', e=>{ state.perf.lda=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-slope', e=>{ state.perf.slope=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-slopedir', e=>{ state.perf.slopeDir=e.target.value; renderContent(); });
+  bind('perf-surf', e=>{ state.perf.surf=e.target.value; renderContent(); });
+  bind('perf-pstate', e=>{ state.perf.pstate=e.target.value; renderContent(); });
+  bind('perf-wdir', e=>{ state.perf.wdir=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-wspd', e=>{ state.perf.wspd=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-mass-to', e=>{ state.perf.massTO=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-mass-ldg', e=>{ state.perf.massLDG=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-cruisepa', e=>{ state.perf.cruisePA=parseFloat(e.target.value)||0; renderContent(); });
+  bind('perf-loadpct', e=>{ state.perf.loadPct=parseFloat(e.target.value)||70; renderContent(); });
+  const btnTO = document.getElementById('perf-tab-to'); if(btnTO) btnTO.onclick=()=>{ state.perf.tab='to'; renderContent(); };
+  const btnLDG = document.getElementById('perf-tab-ldg'); if(btnLDG) btnLDG.onclick=()=>{ state.perf.tab='ldg'; renderContent(); };
+  const btnClimb = document.getElementById('perf-tab-climb'); if(btnClimb) btnClimb.onclick=()=>{ state.perf.tab='climb'; renderContent(); };
+  const btnFL = document.getElementById('perf-flaps-ldg'); if(btnFL) btnFL.onclick=()=>{ state.perf.flaps='LDG'; renderContent(); };
+  const btnFU = document.getElementById('perf-flaps-up'); if(btnFU) btnFU.onclick=()=>{ state.perf.flaps='UP'; renderContent(); };
+  wirePerfOpenAip();
+}
+
+/* ============================= MAP ============================= */
+const OPENAIP_LAYER_DEFS = [
+  { key:'openaip', label:'OpenAIP (espaces, terrains, points de report, aides à la nav)' },
+];
+function buildOpenAipLayer(key){
+  return L.tileLayer(
+    `https://{s}.api.tiles.openaip.net/api/data/${key}/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(state.openaipApiKey)}`,
+    { attribution:'&copy; <a href="https://www.openaip.net/">openAIP</a> data (CC-BY-NC 4.0)', subdomains:['a','b','c'],
+      minZoom:4, minNativeZoom:7, maxNativeZoom:14, maxZoom:16, opacity:0.9 }
+  );
+}
+function rebuildOpenAipLayers(){
+  if(!map) return;
+  OPENAIP_LAYER_DEFS.forEach(def=>{
+    const wasOnMap = openaipLayers[def.key] && map.hasLayer(openaipLayers[def.key]);
+    if(openaipLayers[def.key]){ layersControl.removeLayer(openaipLayers[def.key]); map.removeLayer(openaipLayers[def.key]); }
+    if(!state.openaipApiKey) return;
+    openaipLayers[def.key] = buildOpenAipLayer(def.key);
+    layersControl.addOverlay(openaipLayers[def.key], def.label);
+    if(wasOnMap) openaipLayers[def.key].addTo(map);
+  });
+}
+function initMap(){
+  const initCenter = state.mapView ? [state.mapView.lat, state.mapView.lng] : [43.5417,6.9531];
+  const initZoom = state.mapView ? state.mapView.zoom : 10;
+  map = L.map('map', {zoomControl:true}).setView(initCenter, initZoom);
+
+  osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+  });
+  satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri, Maxar, Earthstar Geographics', maxZoom: 19
+  });
+
+  (state.mapBase === 'satellite' ? satelliteLayer : osmLayer).addTo(map);
+  layersControl = L.control.layers(
+    { 'OpenStreetMap': osmLayer, 'Satellite (Esri)': satelliteLayer },
+    {}, { position:'topright', collapsed:false }
+  ).addTo(map);
+  if(state.openaipApiKey) rebuildOpenAipLayers();
+  if(state.mapOpenAipOn && openaipLayers.openaip) openaipLayers.openaip.addTo(map);
+
+  map.on('baselayerchange', e=>{ state.mapBase = (e.name==='Satellite (Esri)') ? 'satellite' : 'osm'; });
+  map.on('overlayadd', e=>{ if(e.layer===openaipLayers.openaip) state.mapOpenAipOn = true; });
+  map.on('overlayremove', e=>{ if(e.layer===openaipLayers.openaip) state.mapOpenAipOn = false; });
+  map.on('moveend', ()=>{ const c=map.getCenter(); state.mapView = {lat:c.lat, lng:c.lng, zoom:map.getZoom()}; });
+
+  map.on('click', e=>{
+    if(state.placingAlternate){
+      state.alternatePoint = { lat: e.latlng.lat, lon: e.latlng.lng };
+      state.placingAlternate = false;
+      renderContent();
+      showToast('Point de dégagement placé ✓');
+      return;
+    }
+    const id = uid++;
+    const name = 'WP' + (state.waypoints.length + 1);
+    state.waypoints.push({ id, name, lat: e.latlng.lat, lon: e.latlng.lng, windDir:null, windSpeed:null, manual:false, alt: state.cruiseAlt });
+    state.legs = [];
+    renderContent();
+  });
+}
+function refreshMap(){
+  requestAnimationFrame(()=>{
+    const container = document.getElementById('map');
+    if(!container) return;
+    if(map && map.getContainer() === container){
+      map.invalidateSize();
+      renderMapMarkers();
+      return;
+    }
+    if(map){ map.remove(); map = null; }
+    initMap();
+    renderMapMarkers();
+  });
+}
+function renderMapMarkers(){
+  mapMarkers.forEach(m=>map.removeLayer(m)); mapMarkers=[];
+  if(mapLine){ map.removeLayer(mapLine); mapLine=null; }
+  const latlngs = [];
+  state.waypoints.forEach((wp,i)=>{
+    const isTOD = wp.name && wp.name.toUpperCase().startsWith('TOD');
+    const bg = isTOD ? '#e0a856' : (i===0?'#4fd1a5':(i===state.waypoints.length-1?'#e0685f':'#5b8cff'));
+    const shape = isTOD ? 'border-radius:6px;transform:rotate(45deg);' : 'border-radius:50%;';
+    const inner = isTOD ? `<span style="transform:rotate(-45deg);">↓</span>` : `${i+1}`;
+    const icon = L.divIcon({
+      html: `<div style="background:${bg}; ${shape}
+        color:#06231a;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+        font-weight:700;font-size:11px;border:2px solid #0b0d12;box-shadow:0 2px 6px rgba(0,0,0,0.5);">${inner}</div>`,
+      className:'', iconSize:[24,24], iconAnchor:[12,12]
+    });
+    const m = L.marker([wp.lat,wp.lon],{icon, draggable:true}).addTo(map)
+      .bindTooltip(wp.name + (isTOD ? ` (Top of Descent, ${Math.round(wp.alt)} ft)` : ''), {permanent:false, direction:'top'});
+    m.on('dragend', ()=>{ const ll = m.getLatLng(); wp.lat = ll.lat; wp.lon = ll.lng; state.legs=[]; renderContent(); });
+    mapMarkers.push(m);
+    latlngs.push([wp.lat,wp.lon]);
+  });
+  if(latlngs.length>1){ mapLine = L.polyline(latlngs, {color:'#4fd1a5', weight:2, dashArray:'5,5'}).addTo(map); }
+
+  if(state.alternatePoint){
+    const ap = state.alternatePoint;
+    const icon = L.divIcon({
+      html: `<div style="background:#b06be0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+        clip-path:polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+        color:#1a0b23;font-weight:700;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,0.5);">A</div>`,
+      className:'', iconSize:[22,22], iconAnchor:[11,11]
+    });
+    const m = L.marker([ap.lat, ap.lon], {icon, draggable:true}).addTo(map)
+      .bindTooltip('Dégagement' + (state.altnIcao?(' — '+state.altnIcao):''), {permanent:false, direction:'top'});
+    m.on('dragend', ()=>{ const ll = m.getLatLng(); state.alternatePoint = {lat:ll.lat, lon:ll.lng}; renderContent(); });
+    mapMarkers.push(m);
+    if(state.waypoints.length>0){
+      const dest = state.waypoints[state.waypoints.length-1];
+      const altnLine = L.polyline([[dest.lat,dest.lon],[ap.lat,ap.lon]], {color:'#b06be0', weight:2, dashArray:'3,6'}).addTo(map);
+      mapMarkers.push(altnLine);
+    }
+  }
+}
+
+/* ============================= BOOTSTRAP ============================= */
+function renderAll(){
+  renderTopbar();
+  renderContent(); // renderContent() now also refreshes the map via refreshMap()
+}
+(async function boot(){
+  renderShell();
+  try{
+    const res = await appStorage.get('app_settings');
+    if(res && res.value){ const s = JSON.parse(res.value); if(s.openaipApiKey) state.openaipApiKey = s.openaipApiKey; }
+  }catch(e){}
+  await loadSavedIndex();
+  renderAll();
+})();
+</script>
+</body>
+</html>
